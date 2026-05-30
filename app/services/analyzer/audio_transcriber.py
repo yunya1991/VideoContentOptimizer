@@ -7,7 +7,7 @@ import subprocess
 import os
 from typing import Optional, List
 from app.config import get_settings
-from app.models.schema import VideoIntent
+from app.utils.logger import logger
 
 settings = get_settings()
 
@@ -120,7 +120,8 @@ class AudioTranscriber:
     
     def _extract_audio(self, video_path: str) -> str:
         """提取音频到临时文件"""
-        temp_audio = tempfile.mktemp(suffix='.wav')
+        fd, temp_audio = tempfile.mkstemp(suffix='.wav')
+        os.close(fd)
         
         cmd = [
             settings.FFMPEG_PATH,
@@ -154,5 +155,5 @@ class AudioTranscriber:
         if file_path and os.path.exists(file_path):
             try:
                 os.remove(file_path)
-            except:
-                pass  # 忽略清理失败
+            except OSError as e:
+                logger.debug(f"清理临时文件失败 {file_path}: {e}")

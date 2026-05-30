@@ -5,6 +5,7 @@
 from typing import Dict, List, Optional
 from app.models.schema import VideoIntent, QualityScore, VideoMetadata
 from app.utils.ai_client import LLMClient
+from app.utils.logger import logger
 from app.config import get_settings
 
 settings = get_settings()
@@ -34,7 +35,7 @@ class QualityScorer:
                 model=settings.LLM_MODEL
             )
         except Exception as e:
-            print(f"创建 LLM 客户端失败: {e}")
+            logger.warning(f"创建 LLM 客户端失败: {e}")
             return None
     
     def score_content_quality(
@@ -80,7 +81,7 @@ class QualityScorer:
                 score = float(match.group(1))
                 return min(max(score, 0.0), 10.0)
         except Exception as e:
-            print(f"内容质量评分失败: {e}")
+            logger.warning(f"内容质量评分失败: {e}")
         
         return 7.0
     
@@ -111,7 +112,7 @@ class QualityScorer:
                 resolution_score = 1.5
             else:
                 resolution_score = 0.5
-        except:
+        except Exception:
             resolution_score = 0.0
         
         # 帧率评分

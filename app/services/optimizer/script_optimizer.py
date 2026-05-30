@@ -5,6 +5,7 @@
 from typing import Dict, List, Optional
 from app.models.schema import VideoIntent
 from app.utils.ai_client import LLMClient
+from app.utils.logger import logger
 from app.config import get_settings
 
 settings = get_settings()
@@ -34,7 +35,7 @@ class ScriptOptimizer:
                 model=settings.LLM_MODEL
             )
         except Exception as e:
-            print(f"创建 LLM 客户端失败: {e}")
+            logger.warning(f"创建 LLM 客户端失败: {e}")
             return None
     
     def optimize_script(
@@ -72,7 +73,7 @@ class ScriptOptimizer:
             result = self.llm_client.generate_json(prompt)
             return self._parse_optimization_result(result, original_script)
         except Exception as e:
-            print(f"文案优化失败: {e}")
+            logger.warning(f"文案优化失败: {e}")
             return {
                 "optimized_script": original_script,
                 "changes": [f"优化失败: {str(e)}"],
@@ -185,7 +186,7 @@ class ScriptOptimizer:
         try:
             return self.llm_client.generate(prompt).strip()
         except Exception as e:
-            print(f"平台优化失败: {e}")
+            logger.warning(f"平台优化失败: {e}")
             return script
     
     def _get_platform_style(self, platform: str) -> str:

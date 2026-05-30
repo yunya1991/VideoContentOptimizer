@@ -2,15 +2,16 @@
 API v2 - 分析控制器
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from typing import List, Optional
 import os
+import uuid
 import tempfile
 import shutil
+from typing import List, Optional
+
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 
 from app.config import get_settings
+from app.utils.logger import logger
 from app.models.schema import VideoAnalysisResult, VideoMetadata, VideoIntent, QualityScore
 from app.services.analyzer.video_parser import VideoParser
 from app.services.analyzer.audio_transcriber import AudioTranscriber
@@ -20,143 +21,235 @@ from app.services.analyzer.quality_scorer import QualityScorer
 router = APIRouter(prefix="/analyzer", tags=["分析"])
 
 settings = get_settings()
-TEMP_DIR = tempfile.gettempdir()
+
+# 内存任务存储（生产环境应替换为 Redis/DB）
+_analysis_tasks: dict = {}
+
 
 # --- 请求/响应模型 ---
 
-class AnalyzeRequest(BaseModel):
-    """分析请求"""
-    video_path: str
-    extract_keywords: bool = True
-    predict_trend: bool = True
+from pydantic import BaseModel
+
 
 class AnalysisResponse(BaseModel):
     """分析响应"""
     task_id: str
     status: str
+    filename: Optional[str] = None
     metadata: Optional[VideoMetadata] = None
     transcript: Optional[str] = None
     intent: Optional[VideoIntent] = None
     quality_score: Optional[QualityScore] = None
-    estimated_time: int = 30
+
+
+# --- 安全工具函数 ---
+
+def _sanitize_filename(filename: str) -> str:
+    """清洗文件名，防止路径穿越"""
+    safe_name = os.path.basename(filename)
+    name, ext = os.path.splitext(safe_name)
+    # 只保留字母数字、连字符、下划线
+    safe_name = "".join(c for c in name if c.isalnum() or c in "-_")
+    if not safe_name:
+        safe_name = "upload"
+    return safe_name + ext.lower()
+
+
+def _validate_extension(filename: str) -> str:
+    """校验文件扩展名"""
+    ext = os.path.splitext(filename)[1].lower().lstrip(".")
+    allowed = settings.ALLOWED_EXTENSIONS
+    if ext not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式 '.{ext}'，支持: {', '.join(allowed)}",
+        )
+    return ext
+
+
+def _save_upload(file: UploadFile) -> str:
+    """安全地保存上传文件到临时目录，返回路径"""
+    safe_name = _sanitize_filename(file.filename or "video.mp4")
+    _validate_extension(safe_name)
+
+    unique_name = f"{uuid.uuid4().hex}_{safe_name}"
+    temp_dir = tempfile.gettempdir()
+    temp_path = os.path.join(temp_dir, unique_name)
+
+    # 文件大小校验
+    max_bytes = settings.MAX_VIDEO_SIZE_MB * 1024 * 1024
+    total_size = 0
+
+    with open(temp_path, "wb") as buffer:
+        while chunk := file.file.read(1024 * 1024):  # 1MB 分块读取
+            total_size += len(chunk)
+            if total_size > max_bytes:
+                buffer.close()
+                os.remove(temp_path)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"文件过大，最大允许 {settings.MAX_VIDEO_SIZE_MB} MB",
+                )
+            buffer.write(chunk)
+
+    logger.info(f"文件已保存: {temp_path} ({total_size} bytes)")
+    return temp_path
+
+
+def _cleanup(path: str):
+    """安全清理临时文件"""
+    try:
+        if path and os.path.isfile(path):
+            os.remove(path)
+    except OSError as e:
+        logger.warning(f"清理临时文件失败 {path}: {e}")
+
 
 # --- 接口 ---
 
-@router.post("/analyze", response_model=AnalysisResponse)
+@router.post("/analyze", response_model=AnalysisResponse, summary="分析单个视频")
 async def analyze_video(
-    video: UploadFile = File(...),
-    extract_keywords: bool = True,
-    predict_trend: bool = True
+    video: UploadFile = File(..., description="视频文件 (mp4, mov, avi, mkv)"),
+    extract_keywords: bool = Query(True, description="是否提取关键词"),
+    predict_trend: bool = Query(True, description="是否预测热度"),
 ):
-    """
-    分析单个视频
-    
-    - **video**: 视频文件 (mp4, mov, avi, mkv)
-    - **extract_keywords**: 是否提取关键词
-    - **predict_trend**: 是否预测热度
-    """
+    """上传并分析视频，返回元数据、转录、意图识别和质量评分"""
     temp_path = None
+    task_id = f"task_{uuid.uuid4().hex[:12]}"
+
     try:
-        # 保存上传的文件
-        temp_path = os.path.join(TEMP_DIR, video.filename)
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(video.file, buffer)
-        
-        # 分析视频
+        # 1. 安全保存文件
+        temp_path = _save_upload(video)
+
+        # 2. 视频元数据解析
         parser = VideoParser()
         metadata = parser.parse_video(temp_path)
-        
-        # 创建响应
-        response = AnalysisResponse(
-            task_id=f"task_{hash(temp_path) % 100000}",
-            status="processing"
-        )
-        
-        # 转录音频（异步任务中完成）
+        logger.info(f"元数据解析完成: {metadata.duration:.1f}s, {metadata.resolution}")
+
+        # 3. 音频转录
         transcript = None
         if settings.ENABLE_AUDIO_TRANSCRIPTION:
             try:
                 transcriber = AudioTranscriber()
                 transcript = transcriber.transcribe(temp_path)
-                response.transcript = transcript[:500] + "..." if transcript and len(transcript) > 500 else transcript
+                logger.info(f"转录完成: {len(transcript)} 字符")
             except Exception as e:
-                print(f"转录失败: {e}")
-        
-        response.metadata = metadata
-        response.status = "completed"
-        
-        return response
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        # 清理临时文件
-        if temp_path and os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except:
-                pass
+                logger.warning(f"转录失败 (非致命): {e}")
 
-@router.post("/batch", summary="批量分析")
-async def batch_analyze(videos: List[UploadFile] = File(...)):
-    """
-    批量分析视频
-    """
+        # 4. 意图识别
+        intent = None
+        if transcript:
+            try:
+                detector = IntentDetector()
+                intent = detector.detect_intent(transcript)
+                logger.info(f"意图识别: {intent.category}")
+            except Exception as e:
+                logger.warning(f"意图识别失败 (非致命): {e}")
+
+        # 5. 质量评分
+        quality = None
+        try:
+            scorer = QualityScorer()
+            quality = scorer.score_production_quality(metadata)
+            logger.info(f"质量评分: 制作 {quality.production_quality:.1f}")
+        except Exception as e:
+            logger.warning(f"质量评分失败 (非致命): {e}")
+
+        # 6. 构建响应
+        response = AnalysisResponse(
+            task_id=task_id,
+            status="completed",
+            filename=video.filename,
+            metadata=metadata,
+            transcript=(
+                transcript[:500] + "..."
+                if transcript and len(transcript) > 500
+                else transcript
+            ),
+            intent=intent,
+            quality_score=quality,
+        )
+
+        # 缓存结果
+        _analysis_tasks[task_id] = response.model_dump()
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"分析失败: {e}")
+        raise HTTPException(status_code=500, detail=f"视频分析失败: {str(e)}")
+    finally:
+        _cleanup(temp_path)
+
+
+@router.post("/batch", summary="批量分析视频")
+async def batch_analyze(
+    videos: List[UploadFile] = File(..., description="视频文件列表"),
+):
+    """批量分析视频"""
+    if len(videos) > settings.MAX_BATCH_VIDEOS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"批量上传数量超限，最多 {settings.MAX_BATCH_VIDEOS} 个",
+        )
+
     results = []
-    
     for video in videos:
         temp_path = None
         try:
-            temp_path = os.path.join(TEMP_DIR, video.filename)
-            with open(temp_path, "wb") as buffer:
-                shutil.copyfileobj(video.file, buffer)
-            
+            temp_path = _save_upload(video)
             parser = VideoParser()
             metadata = parser.parse_video(temp_path)
-            
+
             results.append({
                 "filename": video.filename,
                 "status": "success",
                 "duration": metadata.duration,
-                "resolution": metadata.resolution
+                "resolution": metadata.resolution,
+                "file_size": metadata.file_size,
             })
-            
-        except Exception as e:
+        except HTTPException as e:
             results.append({
                 "filename": video.filename,
                 "status": "error",
-                "error": str(e)
+                "error": e.detail,
+            })
+        except Exception as e:
+            logger.error(f"批量分析单个文件失败 {video.filename}: {e}")
+            results.append({
+                "filename": video.filename,
+                "status": "error",
+                "error": str(e),
             })
         finally:
-            if temp_path and os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except:
-                    pass
-    
+            _cleanup(temp_path)
+
+    batch_id = f"batch_{uuid.uuid4().hex[:12]}"
+    logger.info(f"批量分析完成: {batch_id}, 成功 {sum(1 for r in results if r['status'] == 'success')}/{len(videos)}")
+
     return {
-        "batch_id": "batch_12345",
+        "batch_id": batch_id,
         "total": len(videos),
         "processed": len([r for r in results if r["status"] == "success"]),
-        "results": results
+        "results": results,
     }
 
-@router.get("/result/{task_id}")
+
+@router.get("/result/{task_id}", summary="获取分析结果")
 async def get_analysis_result(task_id: str):
-    """
-    获取分析结果
-    """
-    # TODO: 从数据库或缓存中获取结果
-    return {
-        "task_id": task_id,
-        "status": "completed",
-        "result": {}
-    }
+    """获取缓存的分析结果"""
+    result = _analysis_tasks.get(task_id)
+    if result:
+        return {"task_id": task_id, "status": "completed", "result": result}
+    return {"task_id": task_id, "status": "not_found", "result": None}
 
-@router.get("/supported-formats")
+
+@router.get("/supported-formats", summary="获取支持的格式")
 async def get_supported_formats():
     """获取支持的视频格式"""
     return {
-        "formats": ["mp4", "mov", "avi", "mkv", "flv", "wmv"],
-        "max_size_mb": settings.MAX_VIDEO_SIZE_MB
+        "formats": settings.ALLOWED_EXTENSIONS,
+        "max_size_mb": settings.MAX_VIDEO_SIZE_MB,
     }

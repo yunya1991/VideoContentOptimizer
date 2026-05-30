@@ -6,6 +6,7 @@ import json
 from typing import List, Optional
 from app.models.schema import VideoIntent
 from app.utils.ai_client import LLMClient
+from app.utils.logger import logger
 from app.config import get_settings
 
 settings = get_settings()
@@ -60,7 +61,7 @@ class IntentDetector:
             result = self.llm_client.generate_json(prompt)
             return self._parse_result(result)
         except Exception as e:
-            print(f"意图识别失败: {e}")
+            logger.warning(f"意图识别失败: {e}")
             return self._default_intent()
     
     def _build_prompt(

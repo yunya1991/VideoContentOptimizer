@@ -5,6 +5,7 @@
 from typing import List, Dict, Optional
 from app.models.schema import VideoIntent, TitleVariant
 from app.utils.ai_client import LLMClient
+from app.utils.logger import logger
 from app.config import get_settings
 
 settings = get_settings()
@@ -45,7 +46,7 @@ class TitleGenerator:
                 model=settings.LLM_MODEL
             )
         except Exception as e:
-            print(f"创建 LLM 客户端失败: {e}")
+            logger.warning(f"创建 LLM 客户端失败: {e}")
             return None
     
     def generate_titles(
@@ -91,7 +92,7 @@ class TitleGenerator:
             return titles[:num_titles]
         
         except Exception as e:
-            print(f"标题生成失败: {e}")
+            logger.warning(f"标题生成失败: {e}")
             return self._fallback_titles(transcript)
     
     def _build_prompt(

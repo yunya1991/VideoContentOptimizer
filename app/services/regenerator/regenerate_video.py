@@ -7,6 +7,7 @@ import subprocess
 from typing import List, Dict, Optional
 from app.config import get_settings
 from app.models.schema import VideoAnalysisResult, OptimizationPlan
+from app.utils.logger import logger
 
 settings = get_settings()
 
@@ -118,7 +119,7 @@ class VideoRegenerator:
             output_path = f"{base_name}_{platform}.mp4"
         
         # 读取平台配置
-        template_path = f"resource/templates/{platform}_template.json"
+        template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "resource", "templates", f"{platform}_template.json")
         
         if not os.path.exists(template_path):
             # 没有模板，直接返回原视频
@@ -133,7 +134,7 @@ class VideoRegenerator:
             
             # 获取目标分辨率
             target_resolution = template.get("optimal_specs", {}).get("resolution", "1920x1080")
-            width, height = map(int, target_resolution.replace('x', 'x').split('x'))
+            width, height = map(int, target_resolution.split('x'))
             
             # 使用 ffmpeg 调整分辨率
             cmd = [
@@ -158,7 +159,7 @@ class VideoRegenerator:
             return output_path
             
         except Exception as e:
-            print(f"应用平台模板失败: {e}")
+            logger.warning(f"应用平台模板失败: {e}")
             # 失败时返回原视频
             import shutil
             shutil.copy2(video_path, output_path)
@@ -173,7 +174,7 @@ class VideoRegenerator:
         """
         # TODO: 集成 TTS 服务（如 Azure、讯飞、阿里云等）
         # 这里返回一个占位符
-        print(f"TTS 生成（待实现）: {text[:50]}...")
+        logger.info(f"TTS 生成（待实现）: {text[:50]}...")
         return None
     
     def _extract_frames(self, video_path: str) -> str:
@@ -188,6 +189,7 @@ class VideoRegenerator:
         
         cmd = [
             self.ffmpeg_path,
+            '-y',
             '-i', video_path,
             '-vf', 'fps=1',  # 每秒提取一帧（示例）
             os.path.join(frames_dir, 'frame_%04d.jpg')
@@ -196,7 +198,7 @@ class VideoRegenerator:
         try:
             subprocess.run(cmd, capture_output=True, timeout=60)
         except Exception as e:
-            print(f"提取帧失败: {e}")
+            logger.warning(f"提取帧失败: {e}")
         
         return frames_dir
     
@@ -214,5 +216,5 @@ class VideoRegenerator:
         """
         # TODO: 实现帧到视频的合成
         # 这需要使用 ffmpeg 或 OpenCV 的视频编写器
-        print("视频合成（待实现）")
+        logger.info("视频合成（待实现）")
         return False

@@ -5,6 +5,7 @@ LLM 客户端封装
 from typing import Optional, Dict, Any
 import json
 import re
+from app.utils.logger import logger
 
 class LLMClient:
     """统一的 LLM 客户端接口"""

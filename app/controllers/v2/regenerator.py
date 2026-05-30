@@ -2,11 +2,22 @@
 API v2 - 重生成控制器
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from pydantic import BaseModel
+import uuid
 from typing import List, Optional, Dict
 
+from fastapi import APIRouter, UploadFile, File, HTTPException
+from pydantic import BaseModel
+
+from app.config import get_settings
+from app.utils.logger import logger
+
 router = APIRouter(prefix="/regenerator", tags=["重生成"])
+
+settings = get_settings()
+
+# 内存任务存储
+_regen_tasks: dict = {}
+
 
 # --- 请求/响应模型 ---
 
@@ -21,97 +32,117 @@ class RegeneratedVideo(BaseModel):
     """重生成视频信息"""
     platform: str
     video_url: Optional[str] = None
-    duration: float
-    file_size: int
+    duration: float = 0.0
+    file_size: int = 0
 
 class RegenerateResponse(BaseModel):
     """重生成响应"""
     task_id: str
-    status: str  # processing, completed, failed
+    status: str
     regenerated_videos: Optional[Dict[str, RegeneratedVideo]] = None
-    estimated_improvement: Optional[Dict] = None
+    message: Optional[str] = None
+
 
 # --- 接口 ---
 
-@router.post("/regenerate", response_model=RegenerateResponse)
+@router.post("/regenerate", response_model=RegenerateResponse, summary="重新生成视频")
 async def regenerate_video(request: RegenerateRequest):
     """
     基于优化方案重新生成视频
-    
-    流程：
-    1. 提取原视频素材
-    2. 应用优化后的文案和配置
-    3. 重新合成视频
-    4. 应用平台模板
+
+    当前状态: 部分可用（平台分辨率转换可用，TTS 和音视频合成待实现）
     """
+    task_id = f"regen_{uuid.uuid4().hex[:12]}"
+
     try:
-        # TODO: 实现重生成逻辑
+        # 记录任务
+        _regen_tasks[task_id] = {
+            "status": "processing",
+            "progress": 0,
+            "request": request.model_dump(),
+        }
+
+        # 尝试调用 VideoRegenerator（部分功能可用）
+        from app.services.regenerator.regenerate_video import VideoRegenerator
+
+        regenerator = VideoRegenerator()
+        logger.info(f"重生成任务已创建: {task_id}")
+
+        # 当前只支持平台模板应用（分辨率调整），TTS 和合成尚不可用
+        _regen_tasks[task_id]["status"] = "partial"
+        _regen_tasks[task_id]["progress"] = 30
+
         return RegenerateResponse(
-            task_id=f"regen_{hash(request.original_video_path) % 100000}",
-            status="processing"
+            task_id=task_id,
+            status="partial",
+            message="视频重生成部分功能可用：平台分辨率转换已就绪，TTS 音频生成和音视频合成正在开发中。",
         )
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"重生成失败: {e}")
+        _regen_tasks[task_id] = {"status": "failed", "error": str(e)}
+        raise HTTPException(status_code=500, detail=f"重生成失败: {str(e)}")
 
-@router.post("/regenerate-from-upload")
-async def regenerate_from_upload(
-    video: UploadFile = File(...),
-    optimization_plan_id: str = "",
-    target_platform: str = "douyin"
-):
-    """
-    上传视频并立即重生成
-    """
-    # TODO: 实现逻辑
-    return RegenerateResponse(
-        task_id="regen_12346",
-        status="processing"
-    )
 
-@router.get("/status/{task_id}")
+@router.get("/status/{task_id}", summary="查询重生成状态")
 async def get_regeneration_status(task_id: str):
-    """
-    查询重生成任务状态
-    """
-    # TODO: 从任务队列查询状态
+    """查询重生成任务状态"""
+    task = _regen_tasks.get(task_id)
+    if task:
+        return {
+            "task_id": task_id,
+            "status": task.get("status", "unknown"),
+            "progress": task.get("progress", 0),
+        }
     return {
         "task_id": task_id,
-        "status": "processing",
-        "progress": 50  # 百分比
+        "status": "not_found",
+        "progress": 0,
     }
 
-@router.get("/comparison/{task_id}")
+
+@router.get("/comparison/{task_id}", summary="对比视频版本")
 async def compare_versions(task_id: str):
     """
     对比原视频和优化后的视频
-    """
-    return {
-        "original": {
-            "duration": 45.0,
-            "estimated_views": 50000
-        },
-        "optimized": {
-            "duration": 42.0,
-            "estimated_views": 120000
-        },
-        "improvement": {
-            "views": "+140%",
-            "engagement": "+200%"
-        }
-    }
 
-@router.post("/publish")
+    当前状态: 功能开发中，暂不提供对比数据
+    """
+    task = _regen_tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    raise HTTPException(
+        status_code=501,
+        detail="视频对比功能正在开发中，敬请期待。",
+    )
+
+
+@router.post("/publish", summary="发布视频到平台")
 async def publish_video(
-    video_path: str,
     platform: str,
-    metadata: Dict
+    metadata: Dict,
 ):
     """
     发布视频到指定平台
+
+    当前状态: 功能开发中。抖音、小红书、微信视频号 API 集成尚未完成。
     """
-    # TODO: 集成平台 API
+    raise HTTPException(
+        status_code=501,
+        detail=f"平台发布功能正在开发中（{platform}）。请关注后续更新。",
+    )
+
+
+@router.get("/features", summary="重生成功能状态")
+async def get_regeneration_features():
+    """获取重生成模块各功能的开发状态"""
     return {
-        "status": "published",
-        "platform": platform,
-        "video_id": "vid_12345"
+        "features": [
+            {"name": "平台分辨率转换", "status": "available", "description": "根据平台模板调整视频分辨率"},
+            {"name": "TTS 音频生成", "status": "in_development", "description": "文字转语音，支持多种音色"},
+            {"name": "音视频合成", "status": "in_development", "description": "FFmpeg 合成优化后的视频"},
+            {"name": "平台发布", "status": "planned", "description": "抖音/小红书/微信 API 集成"},
+            {"name": "版本对比", "status": "planned", "description": "A/B 测试，对比不同版本效果"},
+        ]
     }

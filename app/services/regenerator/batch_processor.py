@@ -11,6 +11,7 @@ from app.services.analyzer.video_parser import VideoParser
 from app.services.analyzer.audio_transcriber import AudioTranscriber
 from app.services.analyzer.intent_detector import IntentDetector
 from app.services.analyzer.quality_scorer import QualityScorer
+from app.utils.logger import logger
 
 settings = get_settings()
 
@@ -74,9 +75,9 @@ class BatchProcessor:
                 try:
                     result = future.result()
                     results.append(result)
-                    print(f"✅ 处理完成 ({i}/{total}): {os.path.basename(video_path)}")
+                    logger.info(f"处理完成 ({i}/{total}): {os.path.basename(video_path)}")
                 except Exception as e:
-                    print(f"❌ 处理失败 ({i}/{total}): {video_path} - {e}")
+                    logger.warning(f"处理失败 ({i}/{total}): {video_path} - {e}")
                     # 添加失败记录
                     results.append(self._create_failed_result(video_path, str(e)))
                 
@@ -110,7 +111,7 @@ class BatchProcessor:
             try:
                 transcript = self.transcriber.transcribe(video_path)
             except Exception as e:
-                print(f"转录失败: {e}")
+                logger.warning(f"转录失败: {e}")
         
         # 3. 识别意图
         intent = self.detector.detect_intent(transcript)

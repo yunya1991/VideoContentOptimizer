@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 from datetime import datetime
 import json
 import os
+from app.utils.logger import logger
 
 class PublishManager:
     """管理视频的跨平台发布"""
@@ -72,38 +73,34 @@ class PublishManager:
     def _publish_to_douyin(self, video_path: str, metadata: Dict) -> Dict:
         """发布到抖音（示例）"""
         # TODO: 集成抖音开放平台 API
-        print(f"发布到抖音（待实现）: {metadata.get('title', '')}")
-        
-        # 模拟成功
+        logger.info(f"发布到抖音（待实现）: {metadata.get('title', '')}")
+
         return {
-            "status": "success",
+            "status": "not_implemented",
             "platform": "douyin",
-            "video_id": f"douyin_{int(datetime.now().timestamp())}",
-            "url": "https://www.douyin.com/video/..."
+            "message": "抖音发布功能正在开发中，敬请期待。"
         }
     
     def _publish_to_xiaohongshu(self, video_path: str, metadata: Dict) -> Dict:
         """发布到小红书（示例）"""
         # TODO: 集成小红书 API
-        print(f"发布到小红书（待实现）: {metadata.get('title', '')}")
-        
+        logger.info(f"发布到小红书（待实现）: {metadata.get('title', '')}")
+
         return {
-            "status": "success",
+            "status": "not_implemented",
             "platform": "xiaohongshu",
-            "video_id": f"xhs_{int(datetime.now().timestamp())}",
-            "url": "https://www.xiaohongshu.com/..."
+            "message": "小红书发布功能正在开发中，敬请期待。"
         }
     
     def _publish_to_weixin(self, video_path: str, metadata: Dict) -> Dict:
         """发布到微信视频号（示例）"""
         # TODO: 集成微信视频号 API
-        print(f"发布到微信视频号（待实现）: {metadata.get('title', '')}")
-        
+        logger.info(f"发布到微信视频号（待实现）: {metadata.get('title', '')}")
+
         return {
-            "status": "success",
+            "status": "not_implemented",
             "platform": "weixin",
-            "video_id": f"wx_{int(datetime.now().timestamp())}",
-            "url": "https://channels.weixin.qq.com/..."
+            "message": "微信视频号发布功能正在开发中，敬请期待。"
         }
     
     def schedule_publication(
@@ -120,13 +117,11 @@ class PublishManager:
             Dict: 调度结果
         """
         # TODO: 实现定时发布（使用任务队列如 Celery/RQ）
-        print(f"定时发布（待实现）: {platform} at {publish_time}")
-        
+        logger.info(f"定时发布（待实现）: {platform} at {publish_time}")
+
         return {
-            "status": "scheduled",
-            "platform": platform,
-            "scheduled_time": publish_time.isoformat(),
-            "task_id": f"schedule_{int(datetime.now().timestamp())}"
+            "status": "not_implemented",
+            "message": "定时发布功能正在开发中，敬请期待。"
         }
     
     def generate_cross_platform_captions(
@@ -176,15 +171,10 @@ class PublishManager:
             Dict: 视频表现数据
         """
         # TODO: 集成平台数据 API
-        # 模拟数据
         return {
             "video_id": video_id,
             "platform": platform,
-            "views": 50000,
-            "likes": 1500,
-            "comments": 120,
-            "shares": 80,
-            "favorites": 300,
-            "engagement_rate": 3.8,  # 互动率 %
-            "completion_rate": 65.0  # 完播率 %
+            "status": "not_implemented",
+            "message": "数据监控功能正在开发中，敬请期待。",
+            "metrics": {}
         }

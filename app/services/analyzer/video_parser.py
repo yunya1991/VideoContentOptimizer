@@ -5,9 +5,12 @@
 import cv2
 import subprocess
 import json
+import os
+import tempfile
 from typing import List, Optional
 from app.models.schema import VideoMetadata
 from app.config import get_settings
+from app.utils.logger import logger
 
 settings = get_settings()
 
@@ -77,17 +80,16 @@ class VideoParser:
                 format_name = info.get('format', {}).get('format_name', 'unknown')
                 return bitrate, format_name
         except Exception as e:
-            print(f"ffprobe 获取信息失败: {e}")
-        
+            logger.warning(f"ffprobe 获取信息失败: {e}")
+
         return 0, 'unknown'
     
     @staticmethod
     def _get_file_size(video_path: str) -> Optional[int]:
         """获取文件大小"""
         try:
-            import os
             return os.path.getsize(video_path)
-        except:
+        except OSError:
             return None
     
     @staticmethod
@@ -107,33 +109,34 @@ class VideoParser:
         Returns:
             List[str]: 提取的帧图像路径列表
         """
-        import tempfile
-        
         frames = []
         cap = cv2.VideoCapture(video_path)
-        
+
         if not cap.isOpened():
             raise ValueError(f"无法打开视频文件: {video_path}")
-        
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        interval_frames = int(fps * interval)
-        frame_count = 0
-        saved_count = 0
-        
-        while True:
-            ret, frame = cap.read()
-            if not ret or saved_count >= max_frames:
-                break
-            
-            if frame_count % interval_frames == 0:
-                temp_path = tempfile.mktemp(suffix='.jpg')
-                cv2.imwrite(temp_path, frame)
-                frames.append(temp_path)
-                saved_count += 1
-            
-            frame_count += 1
-        
-        cap.release()
+
+        try:
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            interval_frames = int(fps * interval)
+            frame_count = 0
+            saved_count = 0
+
+            while True:
+                ret, frame = cap.read()
+                if not ret or saved_count >= max_frames:
+                    break
+
+                if frame_count % interval_frames == 0:
+                    fd, temp_path = tempfile.mkstemp(suffix='.jpg')
+                    os.close(fd)
+                    cv2.imwrite(temp_path, frame)
+                    frames.append(temp_path)
+                    saved_count += 1
+
+                frame_count += 1
+        finally:
+            cap.release()
+
         return frames
     
     @staticmethod
