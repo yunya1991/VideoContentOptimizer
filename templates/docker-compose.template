@@ -1,0 +1,10 @@
+# Docker配置模板
+
+version: '3.8'
+services:
+  video-optimizer:
+    image: video-optimizer:latest
+    environment:
+      - API_KEY=${API_KEY}
+    volumes:
+      - ./storage:/app/storage
