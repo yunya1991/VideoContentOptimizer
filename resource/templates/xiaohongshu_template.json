@@ -1,0 +1,84 @@
+{
+  "name": "小红书视频模板",
+  "platform": "xiaohongshu",
+  "description": "小红书平台视频模板",
+  "optimal_specs": {
+    "resolution": "1080x1440 (3:4) 或 1080x1920 (9:16)",
+    "fps": 30,
+    "duration_range": [30, 300],
+    "bitrate": "2000-4000 kbps",
+    "codec": "H.264"
+  },
+  "content_structure": {
+    "cover": {
+      "duration": "全程显示",
+      "purpose": "精美封面吸引点击",
+      "techniques": ["高颜值画面", "大字标题", "高饱和度"]
+    },
+    "intro": {
+      "duration": "0-5秒",
+      "purpose": "简明扼要介绍主题",
+      "techniques": ["直接点题", "痛点描述", "价值承诺"]
+    },
+    "main_content": {
+      "duration": "5-280秒",
+      "purpose": "详细教程或分享",
+      "techniques": ["步骤清晰", "细节展示", "真实体验"]
+    },
+    "summary": {
+      "duration": "最后5-10秒",
+      "purpose": "总结要点，引导互动",
+      "techniques": ["要点回顾", "收藏引导", "评论引导"]
+    }
+  },
+  "editing_style": {
+    "cut_frequency": "2-5秒/次",
+    "transitions": ["淡入淡出", "滑动", "缩放"],
+    "effects": ["柔光", "暖色调", "胶片感"],
+    "music": "轻音乐，舒适氛围"
+  },
+  "text_overlay": {
+    "cover_title": {
+      "font_size": "大",
+      "position": "中央或上方",
+      "duration": "全程",
+      "style": "精美字体，带装饰"
+    },
+    "step_markers": {
+      "font_size": "中",
+      "position": "左侧或上方",
+      "duration": "每个步骤期间",
+      "style": "编号清晰，易读"
+    },
+    "key_points": {
+      "font_size": "中",
+      "position": "画面空白处",
+      "duration": "3-5秒/点",
+      "style": "简洁明了"
+    }
+  },
+  "hashtags": {
+    "count": "5-10个",
+    "placement": "标题下方或评论区",
+    "strategy": "长尾关键词 + 热门话题 + 品牌词"
+  },
+  "best_posting_times": [
+    "07:00-09:00",
+    "12:00-13:00",
+    "18:00-20:00",
+    "21:00-23:00"
+  ],
+  "algorithm_factors": {
+    "save_rate": "收藏率 - 最重要",
+    "completion_rate": "完播率",
+    "engagement_rate": "点赞、评论、分享",
+    "click_through_rate": "封面点击率"
+  },
+  "content_tips": [
+    "封面要精美，色调统一",
+    "内容要实用，有干货",
+    "步骤要清晰，易操作",
+    "多用表情符号增加亲和力",
+    "引导收藏和评论"
+  ]
+}

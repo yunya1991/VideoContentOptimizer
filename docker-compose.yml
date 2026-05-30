@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # FastAPI 后端服务
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: video_optimizer_api
+    ports:
+      - "8080:8080"
+    environment:
+      - LLM_PROVIDER=${LLM_PROVIDER:-deepseek}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - REDIS_HOST=redis
+      - POSTGRES_HOST=postgres
+      - LOG_LEVEL=INFO
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./storage:/app/storage
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  # Streamlit Web UI
+  webui:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.webui
+    container_name: video_optimizer_webui
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8080
+      - LLM_PROVIDER=${LLM_PROVIDER:-deepseek}
+      - LLM_API_KEY=${LLM_API_KEY}
+    depends_on:
+      - api
+    volumes:
+      - ./storage:/app/storage
+    restart: unless-stopped
+
+  # Redis 状态存储
+  redis:
+    image: redis:7-alpine
+    container_name: video_optimizer_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+  # PostgreSQL 结果存储
+  postgres:
+    image: postgres:15-alpine
+    container_name: video_optimizer_postgres
+    environment:
+      POSTGRES_DB: videooptimizer
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Nginx 反向代理（可选，生产环境使用）
+  nginx:
+    image: nginx:alpine
+    container_name: video_optimizer_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - webui
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  redis_data:
+  postgres_data:
+
+networks:
+  default:
+    name: video_optimizer_network

@@ -1,0 +1,107 @@
+# 视频分析类 Prompt
+
+[INTENT_DETECTION]
+prompt = """
+你是短视频内容分析专家。分析以下视频内容，识别其核心意图：
+
+【音频转录】
+{transcript}
+
+【视觉特征】
+{visual_features}
+
+【视频标题】
+{title}
+
+请识别视频的核心意图并返回 JSON:
+{{
+  "category": "教育|娱乐|知识分享|生活分享|产品推荐|创意展示|美食|旅游|运动|其他",
+  "sub_category": "具体子类别，如编程教学、美食教程等",
+  "target_audience": "目标受众描述，如18-35岁职场人士、宝妈等",
+  "emotion": "情感基调，如励志、幽默、严肃、温暖、激动等",
+  "core_message": "核心信息，用一句话概括视频要传达的主要内容",
+  "engagement_hooks": ["吸引点1", "吸引点2", "吸引点3"],
+  "value_proposition": "价值主张，用户为什么要看完这个视频",
+  "confidence": 0.85
+}}
+
+重要：只返回标准 JSON，不要有任何其他说明文字。
+"""
+
+[QUALITY_ASSESSMENT]
+prompt = """
+你是视频质量评估专家。评估以下视频内容：
+
+【内容】
+{transcript}
+
+【元数据】
+- 分辨率: {resolution}
+- 时长: {duration}秒
+- 帧率: {fps}
+- 比特率: {bitrate}
+
+【视频类型】
+{category}
+
+请从以下维度评分 (0-10分):
+1. 内容质量 (逻辑性、完整性、价值性)
+2. 制作质量 (画面、声音、剪辑)
+3. 互动潜力 (话题性、讨论空间)
+4. 原创度 (内容独特性)
+
+返回 JSON:
+{{
+  "content_quality": 8.5,
+  "production_quality": 7.2,
+  "engagement_potential": 8.8,
+  "originality": 7.5,
+  "overall_score": 8.0,
+  "improvement_areas": [
+    "开头不够吸引，建议前3秒加入视觉冲击",
+    "信息密度过高，建议分段显示",
+    "缺少明确的CTA，建议末尾加入行动号召"
+  ],
+  "recommendation": "整体表现良好，建议优化开头和结尾以提升互动率"
+}}
+
+重要：只返回标准 JSON。
+"""
+
+[KEYWORD_EXTRACTION]
+prompt = """
+你是关键词提取专家。从以下视频内容中提取关键词：
+
+【内容】
+{transcript}
+
+【视频类型】
+{category}
+
+请提取 10-15 个关键词，包括：
+1. 核心主题词
+2. 高频关键词
+3. 搜索热词
+4. 长尾关键词
+
+返回 JSON:
+{{
+  "keywords": [
+    {{
+      "keyword": "编程",
+      "frequency": 12,
+      "relevance": 0.95,
+      "type": "core"
+    }},
+    {{
+      "keyword": "零基础",
+      "frequency": 5,
+      "relevance": 0.88,
+      "type": "longtail"
+    }}
+  ],
+  "search_volume_ranking": ["编程", "30天", "零基础", "自学"]
+}}
+
+重要：只返回标准 JSON。
+"""

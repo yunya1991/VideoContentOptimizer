@@ -1,0 +1,71 @@
+{
+  "name": "微信视频号模板",
+  "platform": "weixin",
+  "description": "微信视频号平台模板",
+  "optimal_specs": {
+    "resolution": "1080x1920 (9:16) 或 1920x1080 (16:9)",
+    "fps": 24,
+    "duration_range": [10, 180],
+    "bitrate": "1500-2500 kbps",
+    "codec": "H.264"
+  },
+  "content_structure": {
+    "hook": {
+      "duration": "0-3秒",
+      "purpose": "快速吸引熟人圈关注",
+      "techniques": ["亲情友情", "生活场景", "真实感"]
+    },
+    "main_content": {
+      "duration": "3-160秒",
+      "purpose": "传递有价值的内容",
+      "techniques": ["真实感强", "贴近生活", "情感共鸣"]
+    },
+    "cta": {
+      "duration": "最后3-5秒",
+      "purpose": "引导点赞转发",
+      "techniques": ["点赞引导", "转发引导", "关注引导"]
+    }
+  },
+  "editing_style": {
+    "cut_frequency": "3-5秒/次",
+    "transitions": ["淡入淡出", "滑动"],
+    "effects": ["自然", "真实", "不过度"],
+    "music": "流行音乐或配乐，符合内容氛围"
+  },
+  "text_overlay": {
+    "title": {
+      "font_size": "中到大",
+      "position": "上方1/3处",
+      "duration": "全程或前半程"
+    },
+    "key_points": {
+      "font_size": "中",
+      "position": "中间或下方",
+      "duration": "3-5秒/点"
+    }
+  },
+  "hashtags": {
+    "count": "2-4个",
+    "placement": "标题或评论区",
+    "strategy": "社交话题 + 生活场景"
+  },
+  "best_posting_times": [
+    "08:00-10:00",
+    "12:00-14:00",
+    "18:00-20:00",
+    "21:00-22:00"
+  ],
+  "algorithm_factors": {
+    "sharing_rate": "转发率 - 最重要（熟人社交）",
+    "like_rate": "点赞率",
+    "completion_rate": "完播率",
+    "comment_rate": "评论互动"
+  },
+  "content_tips": [
+    "内容要贴近生活，有温度",
+    "避免过度营销感",
+    "引导转发到朋友圈",
+    "利用熟人社交传播",
+    "真实感比精美更重要"
+  ]
+}
