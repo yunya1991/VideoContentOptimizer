@@ -15,6 +15,7 @@ from app.models.schema import (
 )
 from app.services.optimizer.script_optimizer import ScriptOptimizer
 from app.services.optimizer.title_generator import TitleGenerator
+from app.main import get_evolution_engine
 
 router = APIRouter(prefix="/optimizer", tags=["优化"])
 
@@ -78,7 +79,7 @@ async def optimize_video(request: OptimizeRequest):
 
         # 文案优化
         if "script" in request.optimization_types:
-            optimizer = ScriptOptimizer()
+            optimizer = ScriptOptimizer(evolution_engine=get_evolution_engine())
             result = optimizer.optimize_script(
                 original_script=request.transcript,
                 intent=intent,
@@ -125,7 +126,7 @@ async def optimize_script(request: ScriptOptimizeRequest):
             category="通用", sub_category="", target_audience="", emotion=""
         )
 
-        optimizer = ScriptOptimizer()
+        optimizer = ScriptOptimizer(evolution_engine=get_evolution_engine())
         result = optimizer.optimize_script(
             original_script=request.transcript,
             intent=intent,

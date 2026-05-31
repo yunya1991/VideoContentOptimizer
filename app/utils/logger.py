@@ -45,5 +45,19 @@ def setup_logger(log_level: str = "INFO", log_file: str = "./logs/video_optimize
 
     return logger
 
+
+def get_logger(name: str = __name__):
+    """
+    获取带有模块名称标识的 logger 实例
+
+    Args:
+        name: 模块名称，通常传入 __name__
+
+    Returns:
+        loguru.Logger: 配置好的 logger 实例
+    """
+    return logger.bind(name=name)
+
+
 # 模块加载时自动配置（使用默认值，后续可通过 setup_logger 重新配置）
 setup_logger()

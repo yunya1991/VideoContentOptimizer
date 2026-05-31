@@ -90,6 +90,9 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "your-jwt-secret-here"
     TOKEN_EXPIRE_HOURS: int = 24
 
+    # 项目根目录（进化引擎数据存储位置）
+    PROJECT_ROOT: str = "."
+
     # 功能开关
     ENABLE_AUDIO_TRANSCRIPTION: bool = True
     ENABLE_VISUAL_ANALYSIS: bool = True

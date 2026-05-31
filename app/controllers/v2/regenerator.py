@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.utils.logger import logger
+from app.main import get_evolution_engine
 
 router = APIRouter(prefix="/regenerator", tags=["重生成"])
 
@@ -62,6 +63,23 @@ async def regenerate_video(request: RegenerateRequest):
             "request": request.model_dump(),
         }
 
+        # 进化引擎：任务前复盘
+        evolution = get_evolution_engine()
+        task_context = {
+            "optimization_plan_id": request.optimization_plan_id,
+            "variant_id": request.variant_id,
+            "target_platforms": request.target_platforms,
+        }
+        if evolution:
+            try:
+                review = evolution.pre_task_review("regenerate", task_context)
+                if review.get("best_approach"):
+                    logger.info(f"[进化] 重生成建议: {review['best_approach'].get('approach', 'N/A')}")
+                if review.get("error_preventions"):
+                    logger.info(f"[进化] 风险提示: {len(review['error_preventions'])} 条")
+            except Exception as e:
+                logger.warning(f"进化引擎 pre_task_review 失败（非致命）: {e}")
+
         # 尝试调用 VideoRegenerator（部分功能可用）
         from app.services.regenerator.regenerate_video import VideoRegenerator
 
@@ -72,6 +90,19 @@ async def regenerate_video(request: RegenerateRequest):
         _regen_tasks[task_id]["status"] = "partial"
         _regen_tasks[task_id]["progress"] = 30
 
+        # 进化引擎：捕获成功经验（部分功能也算进展）
+        if evolution:
+            try:
+                evolution.capture_success(
+                    task_type="regenerate",
+                    context=task_context,
+                    result={"status": "partial", "progress": 30},
+                    approach="platform_resolution_conversion",
+                    quality_score=0.3,
+                )
+            except Exception as e:
+                logger.warning(f"进化引擎 capture_success 失败（非致命）: {e}")
+
         return RegenerateResponse(
             task_id=task_id,
             status="partial",
@@ -81,6 +112,19 @@ async def regenerate_video(request: RegenerateRequest):
     except Exception as e:
         logger.error(f"重生成失败: {e}")
         _regen_tasks[task_id] = {"status": "failed", "error": str(e)}
+        
+        # 进化引擎：捕获错误经验
+        if evolution:
+            try:
+                evolution.capture_error(
+                    task_type="regenerate",
+                    context=task_context,
+                    error=str(e),
+                    error_type="runtime",
+                )
+            except Exception as ee:
+                logger.warning(f"进化引擎 capture_error 失败（非致命）: {ee}")
+        
         raise HTTPException(status_code=500, detail=f"重生成失败: {str(e)}")
 
 

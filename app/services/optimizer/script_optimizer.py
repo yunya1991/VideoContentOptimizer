@@ -2,25 +2,34 @@
 文案优化器（基于 LLM）
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 from app.models.schema import VideoIntent
 from app.utils.ai_client import LLMClient
 from app.utils.logger import logger
 from app.config import get_settings
+
+if TYPE_CHECKING:
+    from app.services.evolution.engine import EvolutionEngine
 
 settings = get_settings()
 
 class ScriptOptimizer:
     """优化视频文案以提高吸引力和可读性"""
     
-    def __init__(self, llm_client: Optional[LLMClient] = None):
+    def __init__(
+        self,
+        llm_client: Optional[LLMClient] = None,
+        evolution_engine: Optional["EvolutionEngine"] = None,
+    ):
         """
         初始化文案优化器
         
         Args:
             llm_client: LLM 客户端实例
+            evolution_engine: 进化引擎实例（可选）
         """
         self.llm_client = llm_client or self._create_default_client()
+        self.evolution_engine = evolution_engine
     
     def _create_default_client(self) -> Optional[LLMClient]:
         """创建默认的 LLM 客户端"""
@@ -69,11 +78,58 @@ class ScriptOptimizer:
             target_platform
         )
         
+        # 任务前复盘：获取进化建议
+        task_context = {
+            "category": intent.category,
+            "sub_category": intent.sub_category,
+            "target_platform": target_platform,
+            "emotion": intent.emotion,
+        }
+        if self.evolution_engine:
+            try:
+                review = self.evolution_engine.pre_task_review("optimize", task_context)
+                if review.get("best_approach"):
+                    logger.info(f"进化引擎建议: {review['best_approach'].get('approach', 'N/A')}")
+                if review.get("error_preventions"):
+                    logger.info(f"进化引擎风险提示: {len(review['error_preventions'])} 条")
+            except Exception as e:
+                logger.warning(f"进化引擎 pre_task_review 失败（非致命）: {e}")
+        
         try:
             result = self.llm_client.generate_json(prompt)
-            return self._parse_optimization_result(result, original_script)
+            parsed = self._parse_optimization_result(result, original_script)
+            
+            # 捕获成功经验
+            if self.evolution_engine:
+                try:
+                    quality = parsed.get("engagement_increase", 0) / 100.0
+                    quality = max(0.0, min(1.0, quality))
+                    self.evolution_engine.capture_success(
+                        task_type="optimize",
+                        context=task_context,
+                        result={"engagement_increase": parsed.get("engagement_increase")},
+                        approach=f"script_optimization:{target_platform}",
+                        quality_score=quality,
+                    )
+                except Exception as e:
+                    logger.warning(f"进化引擎 capture_success 失败（非致命）: {e}")
+            
+            return parsed
         except Exception as e:
             logger.warning(f"文案优化失败: {e}")
+            
+            # 捕获错误经验
+            if self.evolution_engine:
+                try:
+                    self.evolution_engine.capture_error(
+                        task_type="optimize",
+                        context=task_context,
+                        error=str(e),
+                        error_type="runtime",
+                    )
+                except Exception as ee:
+                    logger.warning(f"进化引擎 capture_error 失败（非致命）: {ee}")
+            
             return {
                 "optimized_script": original_script,
                 "changes": [f"优化失败: {str(e)}"],
@@ -87,8 +143,8 @@ class ScriptOptimizer:
         intent: VideoIntent,
         target_platform: str
     ) -> str:
-        """构建优化 Prompt"""
-        return f"""你是短视频文案优化专家。分析并优化下列视频文案：
+        """构建优化 Prompt（集成进化引擎提示词优化）"""
+        base_prompt = f"""你是短视频文案优化专家。分析并优化下列视频文案：
 
 【原文案】
 {original_script}
@@ -135,6 +191,20 @@ class ScriptOptimizer:
 }}
 
 重要：只返回标准 JSON，不要有其他说明文字。"""
+        
+        # 进化引擎：获取进化后的提示词
+        if self.evolution_engine:
+            try:
+                evolved_prompt = self.evolution_engine.get_evolved_prompt(
+                    "optimize_script", base_prompt
+                )
+                if evolved_prompt and evolved_prompt != base_prompt:
+                    logger.info("已应用进化提示词优化")
+                    return evolved_prompt
+            except Exception as e:
+                logger.warning(f"进化提示词获取失败（使用基础提示词）: {e}")
+        
+        return base_prompt
     
     def _parse_optimization_result(
         self,

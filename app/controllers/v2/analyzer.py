@@ -17,6 +17,7 @@ from app.services.analyzer.video_parser import VideoParser
 from app.services.analyzer.audio_transcriber import AudioTranscriber
 from app.services.analyzer.intent_detector import IntentDetector
 from app.services.analyzer.quality_scorer import QualityScorer
+from app.main import get_evolution_engine
 
 router = APIRouter(prefix="/analyzer", tags=["分析"])
 
@@ -121,6 +122,19 @@ async def analyze_video(
         # 1. 安全保存文件
         temp_path = _save_upload(video)
 
+        # 进化引擎：任务前复盘
+        evolution = get_evolution_engine()
+        task_context = {"filename": video.filename, "task_id": task_id}
+        if evolution:
+            try:
+                review = evolution.pre_task_review("analyze", task_context)
+                if review.get("best_approach"):
+                    logger.info(f"[进化] 分析建议: {review['best_approach'].get('approach', 'N/A')}")
+                if review.get("error_preventions"):
+                    logger.info(f"[进化] 风险提示: {len(review['error_preventions'])} 条")
+            except Exception as e:
+                logger.warning(f"进化引擎 pre_task_review 失败（非致命）: {e}")
+
         # 2. 视频元数据解析
         parser = VideoParser()
         metadata = parser.parse_video(temp_path)
@@ -173,12 +187,40 @@ async def analyze_video(
         # 缓存结果
         _analysis_tasks[task_id] = response.model_dump()
 
+        # 进化引擎：捕获成功经验
+        if evolution:
+            try:
+                quality_val = quality.production_quality / 100.0 if quality else 0.5
+                quality_val = max(0.0, min(1.0, quality_val))
+                evolution.capture_success(
+                    task_type="analyze",
+                    context=task_context,
+                    result={"status": "completed", "has_transcript": transcript is not None},
+                    approach="full_pipeline",
+                    quality_score=quality_val,
+                )
+            except Exception as e:
+                logger.warning(f"进化引擎 capture_success 失败（非致命）: {e}")
+
         return response
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"分析失败: {e}")
+        
+        # 进化引擎：捕获错误经验
+        if evolution:
+            try:
+                evolution.capture_error(
+                    task_type="analyze",
+                    context=task_context,
+                    error=str(e),
+                    error_type="runtime",
+                )
+            except Exception as ee:
+                logger.warning(f"进化引擎 capture_error 失败（非致命）: {ee}")
+        
         raise HTTPException(status_code=500, detail=f"视频分析失败: {str(e)}")
     finally:
         _cleanup(temp_path)

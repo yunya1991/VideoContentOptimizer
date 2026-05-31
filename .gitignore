@@ -105,3 +105,6 @@ Thumbs.db
 # 项目特定
 test/resources/sample_video.mp4
 test/resources/
+
+# Evolution runtime data
+.evolution/
