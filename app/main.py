@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.utils.logger import setup_logger, logger
+from app.services.evolution.souls.soul_manager import SoulManager
 
 # 加载配置
 settings = get_settings()
@@ -98,6 +99,24 @@ async def evolution_status():
         "project_root": str(evolution_engine.project_root),
         "evolution_dir": str(evolution_engine.evolution_dir),
     }
+
+
+@app.get("/evolution/soul/status", summary="Soul 状态")
+async def soul_status(soul_id: str = "default"):
+    """获取 Soul 状态信息
+    
+    Args:
+        soul_id: Soul ID，默认为 'default'
+    
+    Returns:
+        Soul 状态摘要，包括等级、进化分数、对话次数等
+    """
+    try:
+        soul_manager = SoulManager()
+        status = soul_manager.get_soul_status(soul_id=soul_id)
+        return {"status": "active", **status}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取 Soul 状态失败: {str(e)}")
 
 
 # --- 基础端点 ---

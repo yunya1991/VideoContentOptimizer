@@ -23,6 +23,7 @@ from app.services.evolution.learner import ExperienceLearner, LearningType
 from app.services.evolution.pattern import PatternRecognizer
 from app.services.evolution.prompt_evolver import PromptEvolver
 from app.services.evolution.memory import EvolutionMemory
+from app.services.evolution.souls.soul_manager import SoulManager
 
 
 class EvolutionEngine:
@@ -61,6 +62,7 @@ class EvolutionEngine:
         self.learner = ExperienceLearner(self.memory)
         self.pattern_recognizer = PatternRecognizer(self.memory)
         self.prompt_evolver = PromptEvolver(self.evolution_dir)
+        self.soul_manager = SoulManager(self.evolution_dir)
         
         # 确保目录存在
         self._ensure_dirs()
@@ -124,6 +126,14 @@ class EvolutionEngine:
         self._update_metrics(task_type, "success", quality_score or 0.8)
         
         logger.info(f"捕获成功经验: {learning_id} | 任务: {task_type} | 评分: {quality_score}")
+        
+        # 记录对话到 Soul 系统
+        self.soul_manager.record_conversation(
+            user_message=f"任务执行成功: {task_type}",
+            assistant_message=f"成功完成 {task_type} 任务，质量评分: {quality_score}",
+            metadata={"task_type": task_type, "result": result, "approach": approach, "quality_score": quality_score, "learning_id": learning_id}
+        )
+        
         return learning_id
 
     def capture_error(
@@ -168,6 +178,14 @@ class EvolutionEngine:
         self._update_metrics(task_type, "error", 0.0)
         
         logger.warning(f"捕获错误经验: {learning_id} | 任务: {task_type} | 错误: {error[:50]}")
+        
+        # 记录对话到 Soul 系统
+        self.soul_manager.record_conversation(
+            user_message=f"任务执行失败: {task_type}",
+            assistant_message=f"遇到错误: {error_type} - {str(error)[:200]}",
+            metadata={"task_type": task_type, "error": str(error), "error_type": error_type, "recovery_approach": recovery_approach, "learning_id": learning_id}
+        )
+        
         return learning_id
 
     def capture_correction(
@@ -214,6 +232,14 @@ class EvolutionEngine:
         )
         
         logger.info(f"捕获纠正经验: {learning_id} | 任务: {task_type}")
+        
+        # 记录对话到 Soul 系统
+        self.soul_manager.record_conversation(
+            user_message=f"方法修正: {task_type}",
+            assistant_message=f"从 {original_approach} 修正为 {corrected_approach}，原因: {reason}",
+            metadata={"task_type": task_type, "original_approach": original_approach, "corrected_approach": corrected_approach, "reason": reason, "learning_id": learning_id}
+        )
+        
         return learning_id
 
     def capture_feature_request(
@@ -241,6 +267,14 @@ class EvolutionEngine:
         )
         
         logger.info(f"捕获功能需求: {learning_id} | 优先级: {priority}")
+        
+        # 记录对话到 Soul 系统
+        self.soul_manager.record_conversation(
+            user_message=f"功能请求: {description}",
+            assistant_message=f"收到新功能请求，优先级: {priority}",
+            metadata={"description": description, "context": context, "priority": priority, "learning_id": learning_id}
+        )
+        
         return learning_id
 
     # ============================================================

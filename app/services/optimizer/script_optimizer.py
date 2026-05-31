@@ -7,6 +7,7 @@ from app.models.schema import VideoIntent
 from app.utils.ai_client import LLMClient
 from app.utils.logger import logger
 from app.config import get_settings
+from app.services.evolution.souls.soul_manager import SoulManager
 
 if TYPE_CHECKING:
     from app.services.evolution.engine import EvolutionEngine
@@ -30,6 +31,7 @@ class ScriptOptimizer:
         """
         self.llm_client = llm_client or self._create_default_client()
         self.evolution_engine = evolution_engine
+        self.soul_manager = SoulManager()
     
     def _create_default_client(self) -> Optional[LLMClient]:
         """创建默认的 LLM 客户端"""
@@ -76,6 +78,13 @@ class ScriptOptimizer:
             original_script,
             intent,
             target_platform
+        )
+        
+        # Soul 动态注入
+        prompt = self.soul_manager.inject_soul_into_prompt(
+            prompt=prompt,
+            task_type='script_optimization',
+            soul_id='default'
         )
         
         # 任务前复盘：获取进化建议

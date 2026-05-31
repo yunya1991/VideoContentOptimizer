@@ -7,6 +7,7 @@ from app.models.schema import VideoIntent, QualityScore, VideoMetadata
 from app.utils.ai_client import LLMClient
 from app.utils.logger import logger
 from app.config import get_settings
+from app.services.evolution.souls.soul_manager import SoulManager
 
 settings = get_settings()
 
@@ -21,6 +22,7 @@ class QualityScorer:
             llm_client: LLM 客户端实例
         """
         self.llm_client = llm_client or self._create_default_client()
+        self.soul_manager = SoulManager()
     
     def _create_default_client(self) -> Optional[LLMClient]:
         """创建默认的 LLM 客户端"""
@@ -71,6 +73,13 @@ class QualityScorer:
 4. 价值性 - 对观众的价值
 
 返回单一数字评分 (0-10)，只返回数字，不要其他内容。"""
+
+        # 注入 Soul 动态内容
+        prompt = self.soul_manager.inject_soul_into_prompt(
+            prompt=prompt,
+            task_type='quality_assessment',
+            soul_id='default'
+        )
 
         try:
             response = self.llm_client.generate(prompt)
