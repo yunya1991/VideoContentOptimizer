@@ -21,9 +21,6 @@ router = APIRouter(prefix="/optimizer", tags=["优化"])
 
 settings = get_settings()
 
-# 内存存储（生产环境应替换为 Redis/DB）
-_analysis_cache: dict = {}  # 从 analyzer 获取的分析结果缓存
-
 
 # --- 请求/响应模型 ---
 
