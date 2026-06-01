@@ -12,6 +12,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 
 from app.config import get_settings
 from app.utils.logger import logger
+from app.utils.store import TaskStore
 from app.models.schema import VideoAnalysisResult, VideoMetadata, VideoIntent, QualityScore
 from app.services.analyzer.video_parser import VideoParser
 from app.services.analyzer.audio_transcriber import AudioTranscriber
@@ -23,8 +24,8 @@ router = APIRouter(prefix="/analyzer", tags=["分析"])
 
 settings = get_settings()
 
-# 内存任务存储（生产环境应替换为 Redis/DB）
-_analysis_tasks: dict = {}
+# 任务状态存储（TTL=1h，自动清理；Redis 可用时优先使用）
+_analysis_tasks = TaskStore("analysis")
 
 
 # --- 请求/响应模型 ---
@@ -184,8 +185,8 @@ async def analyze_video(
             quality_score=quality,
         )
 
-        # 缓存结果
-        _analysis_tasks[task_id] = response.model_dump()
+        # 缓存结果（TTL=1h 自动清理，不再泄漏）
+        _analysis_tasks.set(task_id, response.model_dump())
 
         # 进化引擎：捕获成功经验
         if evolution:
@@ -208,7 +209,7 @@ async def analyze_video(
         raise
     except Exception as e:
         logger.error(f"分析失败: {e}")
-        
+
         # 进化引擎：捕获错误经验
         if evolution:
             try:
@@ -220,7 +221,7 @@ async def analyze_video(
                 )
             except Exception as ee:
                 logger.warning(f"进化引擎 capture_error 失败（非致命）: {ee}")
-        
+
         raise HTTPException(status_code=500, detail=f"视频分析失败: {str(e)}")
     finally:
         _cleanup(temp_path)
