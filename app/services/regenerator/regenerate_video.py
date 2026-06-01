@@ -81,14 +81,20 @@ class VideoRegenerator:
 
         try:
             new_audio_path = None
+            srt_path = None
             if optimization_plan.script_optimization:
                 new_script = optimization_plan.script_optimization.optimized_script
-                new_audio_path = self._generate_tts(new_script)
+                new_audio_path, srt_path = self._generate_tts_and_srt(new_script)
 
             if new_audio_path:
                 self._combine_video_audio(original_video_path, new_audio_path, output_path)
             else:
                 shutil.copy2(original_video_path, output_path)
+
+            if srt_path and os.path.exists(srt_path):
+                subtitled_path = output_path.replace(".mp4", "_sub.mp4")
+                if self._burn_subtitles(output_path, srt_path, subtitled_path):
+                    shutil.move(subtitled_path, output_path)
 
             return output_path
 
@@ -154,6 +160,99 @@ class VideoRegenerator:
             return output_path
 
     # ─── 私有方法 ──────────────────────────────────────────────────────────
+
+    def _generate_tts_and_srt(self, text: str) -> tuple:
+        """
+        生成 TTS 音频并（可选）创建对应 SRT 字幕文件。
+
+        返回: (audio_path_or_None, srt_path_or_None)
+        字幕仅在 settings.SUBTITLE_ENABLED=True 且音频生成成功时生成。
+        """
+        audio_path = self._generate_tts(text)
+
+        subtitle_enabled = getattr(settings, "SUBTITLE_ENABLED", False)
+        if not audio_path or not subtitle_enabled:
+            return audio_path, None
+
+        try:
+            duration = self._get_audio_duration_seconds(audio_path)
+            from app.services.subtitle.sub_maker import SubMaker
+            maker = SubMaker.from_timed_text(text, duration)
+            srt_path = audio_path.replace(".mp3", ".srt")
+            maker.save_srt(srt_path)
+            logger.info(f"字幕文件生成: {srt_path}, {len(maker.cues)} 条")
+            return audio_path, srt_path
+        except Exception as e:
+            logger.warning(f"字幕生成失败（非致命）: {e}")
+            return audio_path, None
+
+    def _get_audio_duration_seconds(self, audio_path: str) -> float:
+        """
+        获取音频时长（秒）。
+        优先使用 ffprobe，失败则按中文平均语速估算（约 4.5 字/秒）。
+        """
+        try:
+            ffprobe = self.ffmpeg_path.replace("ffmpeg", "ffprobe")
+            if not os.path.isfile(ffprobe):
+                ffprobe = shutil.which("ffprobe") or ""
+            if ffprobe:
+                result = subprocess.run(
+                    [ffprobe, "-v", "quiet", "-print_format", "json",
+                     "-show_format", audio_path],
+                    capture_output=True, text=True, timeout=15,
+                )
+                if result.returncode == 0:
+                    import json as _json
+                    data = _json.loads(result.stdout)
+                    return float(data["format"]["duration"])
+        except Exception:
+            pass
+
+        # 兜底：按文件大小估算（MP3 192kbps ≈ 24000 bytes/sec）
+        try:
+            size = os.path.getsize(audio_path)
+            return max(1.0, size / 24000)
+        except Exception:
+            return 10.0
+
+    def _burn_subtitles(
+        self,
+        video_path: str,
+        srt_path: str,
+        output_path: str,
+    ) -> bool:
+        """
+        使用 FFmpeg subtitles 滤镜将 SRT 字幕烧录进视频。
+
+        字体大小和颜色由 settings.SUBTITLE_FONT_SIZE / SUBTITLE_FONT_COLOR 控制。
+        烧录失败时静默返回 False（调用方保留原视频）。
+        """
+        font_size = getattr(settings, "SUBTITLE_FONT_SIZE", 36)
+        font_color = getattr(settings, "SUBTITLE_FONT_COLOR", "white")
+
+        # Windows 路径需将反斜杠转义，冒号用 \\: 转义
+        srt_escaped = srt_path.replace("\\", "/").replace(":", "\\:")
+
+        force_style = f"FontSize={font_size},PrimaryColour=&H00FFFFFF&"
+
+        cmd = [
+            self.ffmpeg_path, "-y",
+            "-i", video_path,
+            "-vf", f"subtitles='{srt_escaped}':force_style='{force_style}'",
+            "-c:a", "copy",
+            output_path,
+        ]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            if result.returncode != 0:
+                logger.warning(f"字幕烧录失败: {result.stderr[-300:]}")
+                return False
+            logger.info(f"字幕烧录完成: {output_path}")
+            return True
+        except Exception as e:
+            logger.warning(f"字幕烧录异常: {e}")
+            return False
 
     def _generate_tts(self, text: str) -> Optional[str]:
         """
