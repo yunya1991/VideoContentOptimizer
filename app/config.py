@@ -152,23 +152,42 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
 
 
+_WEAK_SECRET_KEYS = {"your-secret-key-here", "your-jwt-secret-here", ""}
+
+_KEY_GEN_HINT = (
+    "生成安全密钥命令：python -c \"import secrets; print(secrets.token_hex(32))\""
+)
+
+
 @lru_cache()
 def get_settings():
     """获取配置单例"""
     settings = Settings()
 
-    # 启动时安全检查
-    if settings.SECRET_KEY in ("your-secret-key-here", ""):
-        warnings.warn(
-            "SECRET_KEY 使用默认值！生产环境请务必在 .env 中设置安全的密钥。",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-    if settings.JWT_SECRET in ("your-jwt-secret-here", ""):
-        warnings.warn(
-            "JWT_SECRET 使用默认值！生产环境请务必在 .env 中设置安全的密钥。",
-            RuntimeWarning,
-            stacklevel=2,
-        )
+    secret_weak = settings.SECRET_KEY in _WEAK_SECRET_KEYS
+    jwt_weak = settings.JWT_SECRET in _WEAK_SECRET_KEYS
+
+    if secret_weak or jwt_weak:
+        weak_fields = []
+        if secret_weak:
+            weak_fields.append("SECRET_KEY")
+        if jwt_weak:
+            weak_fields.append("JWT_SECRET")
+        fields_str = " 和 ".join(weak_fields)
+
+        if not settings.API_DEBUG:
+            # 生产模式：拒绝启动，防止弱密钥被部署到公网
+            raise RuntimeError(
+                f"[安全] 生产环境禁止使用默认弱密钥：{fields_str}。\n"
+                f"请在 .env 中设置强密钥后重启。\n{_KEY_GEN_HINT}"
+            )
+        else:
+            # 调试模式：警告但允许启动
+            warnings.warn(
+                f"{fields_str} 使用默认弱密钥，仅允许在调试模式（API_DEBUG=true）下运行。"
+                f"部署到生产环境前请务必修改。{_KEY_GEN_HINT}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
     return settings
