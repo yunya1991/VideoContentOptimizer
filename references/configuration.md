@@ -157,6 +157,58 @@ LLM_MODEL=deepseek:deepseek-chat       # 明确指定（同样有效）
 LLM_API_KEY=sk-xxx           # DeepSeek API Key（必须）
 ```
 
+## 安全配置（生产环境必须）
+
+| 变量 | 默认值 | 要求 |
+|------|--------|------|
+| `SECRET_KEY` | `your-secret-key-here` | **生产环境必须修改**，否则服务拒绝启动 |
+| `JWT_SECRET` | `your-jwt-secret-here` | **生产环境必须修改**，否则服务拒绝启动 |
+| `API_DEBUG` | `false` | 调试模式下允许弱密钥启动（仅本地开发用） |
+
+生成安全密钥：
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+> 当 `API_DEBUG=false`（默认）且密钥为默认值时，`get_settings()` 会抛出 `RuntimeError` 阻断启动，防止弱密钥部署到公网。
+
+---
+
+## 资源规格参考
+
+### 视频文件限制
+| 规格项 | 默认值 | 配置变量 |
+|--------|--------|----------|
+| 最大文件大小 | 500 MB | `MAX_VIDEO_SIZE_MB` |
+| 支持格式 | mp4/mov/avi/mkv | `ALLOWED_EXTENSIONS` |
+| 推荐时长 | ≤ 30 分钟 | — |
+| 1h 视频转录耗时（base/CPU） | 约 8-15 分钟 | 用 `WHISPER_DEVICE=cuda` 可加速 |
+
+### TTS 单次文本长度上限
+| 引擎 | 上限 | 超长行为 |
+|------|------|----------|
+| `edge` | ~3000 字 | 自动分段合并 |
+| `azure` | ~3000 字 | 自动分段合并 |
+| `siliconflow` | ~500 字 | 建议手动分段 |
+| `gemini` | ~5000 字 | API 限制 |
+| `mimo` | ~1000 字 | API 限制 |
+
+### 任务存储容量（内存模式）
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| 最大条目数 | 10,000 | 超限自动淘汰最旧条目 |
+| TTL | 3600 秒（1 小时） | 过期后自动删除 |
+| Redis 可用时 | 自动切换 | 无容量限制，TTL 由 Redis 管理 |
+
+### 平台发布限制
+| 项目 | 限制 |
+|------|------|
+| 标题最大长度 | 2200 字符（自动截断） |
+| 上传超时 | 300 秒 |
+| 不支持的平台 | xiaohongshu、weixin（自动跳过） |
+
+---
+
 ## 完整配置示例
 
 ```bash
