@@ -10,14 +10,15 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.utils.logger import logger
+from app.utils.store import TaskStore
 from app.main import get_evolution_engine
 
 router = APIRouter(prefix="/regenerator", tags=["重生成"])
 
 settings = get_settings()
 
-# 内存任务存储
-_regen_tasks: dict = {}
+# 任务状态存储（TTL=1h，自动清理）
+_regen_tasks = TaskStore("regen")
 
 
 # --- 请求/响应模型 ---
@@ -54,22 +55,21 @@ async def regenerate_video(request: RegenerateRequest):
     当前状态: 部分可用（平台分辨率转换可用，TTS 和音视频合成待实现）
     """
     task_id = f"regen_{uuid.uuid4().hex[:12]}"
+    evolution = get_evolution_engine()
+    task_context = {
+        "optimization_plan_id": request.optimization_plan_id,
+        "variant_id": request.variant_id,
+        "target_platforms": request.target_platforms,
+    }
 
     try:
-        # 记录任务
-        _regen_tasks[task_id] = {
+        _regen_tasks.set(task_id, {
             "status": "processing",
             "progress": 0,
             "request": request.model_dump(),
-        }
+        })
 
         # 进化引擎：任务前复盘
-        evolution = get_evolution_engine()
-        task_context = {
-            "optimization_plan_id": request.optimization_plan_id,
-            "variant_id": request.variant_id,
-            "target_platforms": request.target_platforms,
-        }
         if evolution:
             try:
                 review = evolution.pre_task_review("regenerate", task_context)
@@ -80,17 +80,14 @@ async def regenerate_video(request: RegenerateRequest):
             except Exception as e:
                 logger.warning(f"进化引擎 pre_task_review 失败（非致命）: {e}")
 
-        # 尝试调用 VideoRegenerator（部分功能可用）
         from app.services.regenerator.regenerate_video import VideoRegenerator
 
         regenerator = VideoRegenerator()
         logger.info(f"重生成任务已创建: {task_id}")
 
-        # 当前只支持平台模板应用（分辨率调整），TTS 和合成尚不可用
-        _regen_tasks[task_id]["status"] = "partial"
-        _regen_tasks[task_id]["progress"] = 30
+        _regen_tasks.update(task_id, status="partial", progress=30)
 
-        # 进化引擎：捕获成功经验（部分功能也算进展）
+        # 进化引擎：捕获成功经验
         if evolution:
             try:
                 evolution.capture_success(
@@ -111,9 +108,8 @@ async def regenerate_video(request: RegenerateRequest):
 
     except Exception as e:
         logger.error(f"重生成失败: {e}")
-        _regen_tasks[task_id] = {"status": "failed", "error": str(e)}
-        
-        # 进化引擎：捕获错误经验
+        _regen_tasks.set(task_id, {"status": "failed", "error": str(e)})
+
         if evolution:
             try:
                 evolution.capture_error(
@@ -124,7 +120,7 @@ async def regenerate_video(request: RegenerateRequest):
                 )
             except Exception as ee:
                 logger.warning(f"进化引擎 capture_error 失败（非致命）: {ee}")
-        
+
         raise HTTPException(status_code=500, detail=f"重生成失败: {str(e)}")
 
 
@@ -184,8 +180,8 @@ async def get_regeneration_features():
     return {
         "features": [
             {"name": "平台分辨率转换", "status": "available", "description": "根据平台模板调整视频分辨率"},
-            {"name": "TTS 音频生成", "status": "in_development", "description": "文字转语音，支持多种音色"},
-            {"name": "音视频合成", "status": "in_development", "description": "FFmpeg 合成优化后的视频"},
+            {"name": "TTS 音频生成", "status": "available", "description": "文字转语音，支持 5 种引擎"},
+            {"name": "音视频合成", "status": "available", "description": "FFmpeg 两阶段合成优化后的视频"},
             {"name": "平台发布", "status": "planned", "description": "抖音/小红书/微信 API 集成"},
             {"name": "版本对比", "status": "planned", "description": "A/B 测试，对比不同版本效果"},
         ]
