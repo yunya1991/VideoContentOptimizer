@@ -57,6 +57,27 @@ class Settings(BaseSettings):
     # MiMo TTS（小米）
     MIMO_API_KEY: str = ""
 
+    # 平台发布（upload-post.com）
+    # 支持: tiktok, youtube, instagram, facebook, twitter, linkedin, pinterest
+    # 本项目映射: douyin→tiktok; xiaohongshu/weixin 不支持，自动跳过
+    UPLOAD_POST_ENABLED: bool = False
+    UPLOAD_POST_API_KEY: str = ""
+    UPLOAD_POST_USERNAME: str = ""
+    UPLOAD_POST_PLATFORMS: List[str] = ["tiktok"]
+
+    @field_validator("UPLOAD_POST_PLATFORMS", mode="before")
+    @classmethod
+    def parse_upload_platforms(cls, v):
+        if isinstance(v, str):
+            return [p.strip().lower() for p in v.split(",") if p.strip()]
+        return v
+
+    # 字幕烧录（FFmpeg subtitles 滤镜）
+    SUBTITLE_ENABLED: bool = False
+    SUBTITLE_FONT_SIZE: int = 36
+    SUBTITLE_FONT_COLOR: str = "white"
+    SUBTITLE_POSITION: str = "bottom"   # bottom / top / center
+
     # 存储配置
     STORAGE_TYPE: str = "local"
     LOCAL_STORAGE_PATH: str = "./storage"
