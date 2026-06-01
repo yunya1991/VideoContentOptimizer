@@ -51,3 +51,12 @@ python-multipart==0.0.6
 
 # 其他
 httpx==0.25.1
+
+# TTS — 必装（edge_tts 为默认免费引擎）
+edge-tts>=6.1.0
+imageio-ffmpeg>=0.4.9   # FFmpeg 跨平台打包版，_find_ffmpeg 兜底依赖
+pydub>=0.25.1           # Gemini TTS PCM→MP3 转换
+
+# TTS — 可选（按需安装对应引擎）
+# azure-cognitiveservices-speech>=1.35.0  # TTS_VOICE_NAME=azure:...
+# google-generativeai>=0.8.0              # TTS_VOICE_NAME=gemini:...
