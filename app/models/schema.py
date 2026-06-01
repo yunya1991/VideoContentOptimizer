@@ -188,3 +188,45 @@ class BatchAnalysisTask(BaseModel):
     
     # 统计信息
     statistics: Optional[Dict] = None
+
+
+# ==================== 优化参数确认 ====================
+
+class OptimizationParams(BaseModel):
+    """用户确认后的优化参数"""
+    target_platform: str = "douyin"
+    optimization_goal: str = "engagement"      # engagement / ctr / brand / viral
+    tone: str = "energetic"                    # energetic / professional / casual / emotional
+    num_variants: int = 5
+    optimization_types: List[str] = ["script", "title"]
+
+
+class OptimizationProfile(BaseModel):
+    """AI 生成的优化方向推荐卡片"""
+    id: str
+    name: str
+    description: str
+    why: str                                   # 针对当前内容的推荐理由
+    params: OptimizationParams
+
+
+class SuggestParamsRequest(BaseModel):
+    """推荐参数请求"""
+    transcript: str
+    keywords: List[str] = []
+    intent: Optional[VideoIntent] = None
+
+
+class SuggestParamsResponse(BaseModel):
+    """推荐参数响应"""
+    profiles: List[OptimizationProfile]
+    default_index: int = 0
+
+
+class ParamChoiceRecord(BaseModel):
+    """Step 1 用户参数选择记录，供进化引擎和 Soul 系统消费"""
+    optimization_id: str
+    interaction_mode: str                   # "cards" | "form"
+    chosen_profile_id: Optional[str] = None # 仅 cards 模式
+    was_ai_recommended: bool = False        # 是否选了 AI 推荐的默认档案
+    final_params: OptimizationParams

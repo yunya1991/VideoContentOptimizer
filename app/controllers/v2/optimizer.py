@@ -13,9 +13,12 @@ from app.utils.logger import logger
 from app.utils.store import TaskStore
 from app.models.schema import (
     OptimizationPlan, ScriptOptimization, TitleVariant, VideoIntent,
+    SuggestParamsRequest, SuggestParamsResponse, ParamChoiceRecord,
 )
 from app.services.optimizer.script_optimizer import ScriptOptimizer
 from app.services.optimizer.title_generator import TitleGenerator
+from app.services.optimizer.param_suggester import ParamSuggester
+from app.services.evolution.souls.soul_manager import SoulManager
 from app.main import get_evolution_engine
 
 router = APIRouter(prefix="/optimizer", tags=["优化"])
@@ -208,3 +211,85 @@ async def get_supported_optimization_types():
             {"id": "trend", "name": "热度预测", "description": "预测视频热度 (即将推出)"},
         ]
     }
+
+
+@router.post("/record-param-choice", summary="记录 Step 1 参数选择（进化引擎 + Soul 画像）")
+async def record_param_choice(record: ParamChoiceRecord):
+    """
+    将用户在 Step 1 的参数选择沉淀为进化材料：
+    - AI 推荐被接受 → capture_success（quality=0.9）
+    - 选了非推荐档案 → capture_success（quality=0.7）
+    - 使用参数表单   → capture_correction（学习用户偏好手动控制）
+    同时更新 Soul 画像的沟通风格和决策偏好。
+    fire-and-forget：前端超时或失败不影响优化主流程。
+    """
+    soul_changes = []
+    try:
+        engine = get_evolution_engine()
+        platform = record.final_params.target_platform
+        goal = record.final_params.optimization_goal
+        context = {
+            "interaction_mode": record.interaction_mode,
+            "chosen_profile": record.chosen_profile_id or "form",
+            "platform": platform,
+            "goal": goal,
+        }
+
+        if engine:
+            if record.interaction_mode == "form":
+                engine.capture_correction(
+                    task_type="param_suggestion",
+                    original_approach="ai_recommendation",
+                    corrected_approach="manual_form",
+                    context=context,
+                    reason="用户选择手动配置参数，偏好精细控制",
+                )
+            elif record.was_ai_recommended:
+                engine.capture_success(
+                    task_type="param_suggestion",
+                    context=context,
+                    result=f"profile={record.chosen_profile_id}",
+                    approach="ai_recommendation_accepted",
+                    quality_score=0.9,
+                )
+            else:
+                engine.capture_success(
+                    task_type="param_suggestion",
+                    context=context,
+                    result=f"profile={record.chosen_profile_id}",
+                    approach="ai_recommendation_alternative",
+                    quality_score=0.7,
+                )
+            logger.info(f"进化引擎记录完成: mode={record.interaction_mode}, profile={record.chosen_profile_id}")
+
+        soul_manager = SoulManager()
+        result = soul_manager.update_from_param_choice(record)
+        soul_changes = result.get("changes", [])
+        if soul_changes:
+            logger.info(f"Soul 画像更新: {soul_changes}")
+
+    except Exception as e:
+        logger.warning(f"record_param_choice 处理异常（不影响主流程）: {e}")
+
+    return {"recorded": True, "soul_changes": soul_changes}
+
+
+@router.post("/suggest-params", response_model=SuggestParamsResponse, summary="推荐优化参数（询问模式·推荐卡片）")
+async def suggest_params(request: SuggestParamsRequest):
+    """
+    根据视频内容生成 3 个优化方向推荐卡片。
+    仅在询问模式下用户选择"推荐卡片"时调用，会额外消耗约 500-1000 tokens。
+    LLM 不可用时自动降级为静态默认档案，不会报错。
+    """
+    try:
+        suggester = ParamSuggester()
+        result = suggester.suggest(
+            transcript=request.transcript,
+            keywords=request.keywords,
+            intent=request.intent,
+        )
+        logger.info(f"参数推荐完成，推荐第 {result.default_index} 个档案")
+        return result
+    except Exception as e:
+        logger.error(f"参数推荐失败: {e}")
+        raise HTTPException(status_code=500, detail=f"参数推荐失败: {str(e)}")

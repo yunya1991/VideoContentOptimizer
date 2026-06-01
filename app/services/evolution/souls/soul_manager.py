@@ -28,6 +28,7 @@ from app.services.evolution.souls.soul import (
     CommunicationStyle,
     DecisionPreference,
 )
+from app.models.schema import ParamChoiceRecord
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +363,87 @@ class SoulManager:
             "last_updated": soul.last_updated,
             "next_update_in": max(0, CONVERSATION_THRESHOLD - soul.conversation_count),
         }
+
+    def update_from_param_choice(
+        self,
+        record: ParamChoiceRecord,
+        soul_id: str = "default",
+    ) -> Dict:
+        """
+        将 Step 1 参数选择信号写入 Soul 画像。
+
+        滑动加权更新，避免单次选择引发剧烈漂移。
+        调用后立即持久化，无需等待 update_soul_from_evolution 周期。
+        """
+        soul = self.get_soul(soul_id)
+        changes = []
+
+        # --- 沟通风格：detail_level ---
+        new_detail = "brief" if record.interaction_mode == "cards" else "detailed"
+        if soul.communication.detail_level != new_detail:
+            changes.append(f"沟通细节偏好: {soul.communication.detail_level} → {new_detail}")
+            soul.communication.detail_level = new_detail
+
+        # --- 沟通风格：tone ---
+        tone_map = {
+            "energetic": "enthusiastic",
+            "professional": "professional",
+            "casual": "casual",
+            "emotional": "calm",
+        }
+        new_tone = tone_map.get(record.final_params.tone, "professional")
+        if soul.communication.tone != new_tone:
+            changes.append(f"沟通基调: {soul.communication.tone} → {new_tone}")
+            soul.communication.tone = new_tone
+
+        # --- 决策偏好：risk_tolerance ---
+        goal = record.final_params.optimization_goal
+        if goal in ("ctr", "viral"):
+            old = soul.decisions.risk_tolerance
+            soul.decisions.risk_tolerance = min(0.9, round(old + 0.05, 3))
+            if soul.decisions.risk_tolerance != old:
+                changes.append(f"风险容忍度 +0.05 → {soul.decisions.risk_tolerance}")
+        elif goal == "brand":
+            old = soul.decisions.risk_tolerance
+            soul.decisions.risk_tolerance = max(0.1, round(old - 0.05, 3))
+            if soul.decisions.risk_tolerance != old:
+                changes.append(f"风险容忍度 -0.05 → {soul.decisions.risk_tolerance}")
+
+        # --- 决策偏好：innovation_bias (AI 推荐接受度) ---
+        old_bias = soul.decisions.innovation_bias
+        delta = 0.03 if record.was_ai_recommended else -0.03
+        soul.decisions.innovation_bias = round(max(0.1, min(0.9, old_bias + delta)), 3)
+        if soul.decisions.innovation_bias != old_bias:
+            direction = "↑" if delta > 0 else "↓"
+            changes.append(f"AI 信任偏好 {direction} → {soul.decisions.innovation_bias}")
+
+        # --- 决策偏好：preferred_strategies ---
+        if record.chosen_profile_id:
+            strats = soul.decisions.preferred_strategies
+            if record.chosen_profile_id not in strats:
+                strats.append(record.chosen_profile_id)
+                soul.decisions.preferred_strategies = strats[-5:]  # 保留最近 5 条
+                changes.append(f"偏好策略追加: {record.chosen_profile_id}")
+
+        # --- 专业能力：目标平台熟练度滑动更新 ---
+        platform = record.final_params.target_platform
+        existing = {e.domain: e for e in soul.expertise}
+        if platform in existing:
+            exp = existing[platform]
+            old_prof = exp.proficiency
+            exp.proficiency = round(min(1.0, old_prof + 0.05), 3)
+            if exp.proficiency != old_prof:
+                changes.append(f"平台熟练度 {platform}: {old_prof} → {exp.proficiency}")
+        else:
+            soul.expertise.append(ExpertiseArea(domain=platform, proficiency=0.1))
+            changes.append(f"新增平台领域: {platform}")
+
+        # --- 持久化 ---
+        if changes:
+            soul.last_updated = datetime.now().isoformat()
+            self._save_soul(soul)
+
+        return {"updated": bool(changes), "changes": changes}
 
     def rollback_soul(self, version: str, soul_id: str = "default") -> Dict:
         """
