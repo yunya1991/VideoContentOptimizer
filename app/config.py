@@ -36,6 +36,26 @@ class Settings(BaseSettings):
             return [ext.strip().lower() for ext in v.split(",") if ext.strip()]
         return v
 
+    # TTS 配置
+    # voice_name 格式：engine:voice，例如 edge:zh-CN-XiaoxiaoNeural
+    # 支持引擎：edge（免费默认）/ azure / siliconflow / gemini / mimo
+    TTS_VOICE_NAME: str = "edge:zh-CN-XiaoxiaoNeural"
+    TTS_VOICE_RATE: int = 0        # 语速百分比，0=原速，正数加速，负数减速
+    TTS_VOICE_VOLUME: float = 1.0  # 音量倍数（1.0=原始）
+
+    # Azure Speech SDK（付费，高质量）
+    AZURE_SPEECH_KEY: str = ""
+    AZURE_SPEECH_REGION: str = "eastus"
+
+    # SiliconFlow CosyVoice2（国内，有免费额度）
+    SILICONFLOW_API_KEY: str = ""
+
+    # Gemini TTS
+    GEMINI_API_KEY: str = ""
+
+    # MiMo TTS（小米）
+    MIMO_API_KEY: str = ""
+
     # 存储配置
     STORAGE_TYPE: str = "local"
     LOCAL_STORAGE_PATH: str = "./storage"
