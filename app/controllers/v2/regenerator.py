@@ -164,14 +164,41 @@ async def publish_video(
     metadata: Dict,
 ):
     """
-    发布视频到指定平台
+    发布视频到指定平台（通过 upload-post.com）。
 
-    当前状态: 功能开发中。抖音、小红书、微信视频号 API 集成尚未完成。
+    需在 .env 中配置:
+      UPLOAD_POST_ENABLED=true
+      UPLOAD_POST_API_KEY=<your_key>
+      UPLOAD_POST_USERNAME=<your_username>
+
+    支持平台: tiktok/douyin, youtube, instagram, facebook, twitter, linkedin
+    不支持: xiaohongshu, weixin（upload-post.com 暂无对应平台）
     """
-    raise HTTPException(
-        status_code=501,
-        detail=f"平台发布功能正在开发中（{platform}）。请关注后续更新。",
-    )
+    from app.services.publish import PublishManager
+
+    pub = PublishManager.from_settings()
+    if not pub.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "平台发布功能未启用。"
+                "请在 .env 中设置 UPLOAD_POST_ENABLED=true 并配置 UPLOAD_POST_API_KEY。"
+            ),
+        )
+
+    video_path = metadata.get("video_path", "")
+    title = metadata.get("title", "")
+    platforms = metadata.get("platforms") or [platform]
+
+    try:
+        result = pub.publish(video_path=video_path, title=title, platforms=platforms)
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @router.get("/features", summary="重生成功能状态")
