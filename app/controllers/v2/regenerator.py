@@ -63,10 +63,16 @@ async def regenerate_video(request: RegenerateRequest):
     }
 
     try:
+        # _evolution_context 供 /feedback 端点查询，归一化后注入进化引擎
         _regen_tasks.set(task_id, {
             "status": "processing",
             "progress": 0,
             "request": request.model_dump(),
+            "_evolution_context": {
+                "task_type": "regenerate",
+                "context": f"plan={request.optimization_plan_id}, variant={request.variant_id}",
+                "approach": "tts_ffmpeg_synthesis",
+            },
         })
 
         # 进化引擎：任务前复盘
@@ -95,7 +101,6 @@ async def regenerate_video(request: RegenerateRequest):
                     context=task_context,
                     result={"status": "partial", "progress": 30},
                     approach="platform_resolution_conversion",
-                    quality_score=0.3,
                 )
             except Exception as e:
                 logger.warning(f"进化引擎 capture_success 失败（非致命）: {e}")
