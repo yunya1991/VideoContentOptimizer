@@ -186,7 +186,15 @@ async def analyze_video(
         )
 
         # 缓存结果（TTL=1h 自动清理，不再泄漏）
-        _analysis_tasks.set(task_id, response.model_dump())
+        # _evolution_context 供 /feedback 端点查询，归一化后注入进化引擎
+        intent_category = intent.category if intent else "unknown"
+        task_data = response.model_dump()
+        task_data["_evolution_context"] = {
+            "task_type": "analyze",
+            "context": f"video={video.filename}, intent={intent_category}",
+            "approach": "whisper_transcription_llm_analysis",
+        }
+        _analysis_tasks.set(task_id, task_data)
 
         # 进化引擎：捕获成功经验
         if evolution:
