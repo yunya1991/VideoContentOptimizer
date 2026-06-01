@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_BASE_URL: Optional[str] = None
     LLM_MODEL: str = "deepseek-chat"
+    ANTHROPIC_API_KEY: str = ""   # Anthropic Claude；LLM_PROVIDER=anthropic 时使用
 
     # Whisper 配置
     WHISPER_MODEL_SIZE: str = "base"
