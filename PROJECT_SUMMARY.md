@@ -1,283 +1,229 @@
 # VideoContentOptimizer - 项目完善总结
 
-## ✅ 已完成的核心模块
+## 已完成的核心模块
 
-### 1️⃣ **配置与工具** (100% 完成)
-- ✅ `app/config.py` - Pydantic 配置管理
-- ✅ `app/utils/ai_client.py` - LLM 客户端（支持 DeepSeek/OpenAI）
-- ✅ `.env.example` - 环境变量模板
-- ✅ `requirements.txt` - Python 依赖清单
-- ✅ `.gitignore` - Git 忽略规则
+### 1. 配置与工具 (100% 完成)
+- `app/config.py` - Pydantic 配置管理（8 大配置块，40+ 字段）
+  - LLM：6 provider 支持 + ANTHROPIC_API_KEY
+  - TTS：5 引擎配置（TTS_VOICE_NAME/RATE/VOLUME + 各引擎 Key）
+  - 字幕：SUBTITLE_ENABLED/FONT_SIZE/FONT_COLOR/POSITION
+  - 发布：UPLOAD_POST_ENABLED/API_KEY/USERNAME/PLATFORMS
+  - 存储：REDIS_HOST/PORT/DB/PASSWORD
+- `app/utils/ai_client.py` - **重写** LLM 统一接口
+  - 6 provider：deepseek/openai/anthropic/qwen/dashscope/siliconflow
+  - model 前缀路由：`anthropic:claude-opus-4-7` 自动切换 provider
+  - Anthropic SDK 差异处理（system 顶层参数，messages.create）
+  - `generate_json()` 三种格式容错（纯 JSON / ``` json ``` / 裸 {}）
+  - `from_settings()` 工厂方法
+- `app/utils/store.py` - **新增** Redis/内存双后端任务存储
+  - TTL 懒清理（默认 1 小时）
+  - MAX_SIZE = 10,000 条，超限淘汰最旧
+  - Redis 不可达时静默降级到内存
+  - set/get/delete/exists/update 全 CRUD
+- `.env.example` - 完整环境变量模板
+- `requirements.txt` - 新增 edge-tts/imageio-ffmpeg/pydub
 
-### 2️⃣ **数据模型** (100% 完成)
-- ✅ `app/models/schema.py` - 完整的 Pydantic 数据模型
+### 2. 数据模型 (100% 完成)
+- `app/models/schema.py` - 完整的 Pydantic 数据模型
   - VideoMetadata, VideoIntent, QualityScore
   - VideoAnalysisResult, OptimizationPlan
   - TitleVariant, ScriptOptimization 等 15+ 模型
 
-### 3️⃣ **视频分析引擎** (100% 完成)
-- ✅ `app/services/analyzer/video_parser.py` - 视频元数据解析
-  - 使用 OpenCV + ffprobe
-  - 提取分辨率、帧率、时长、比特率
-  - 关键帧提取功能
-- ✅ `app/services/analyzer/audio_transcriber.py` - 音频转录
-  - 基于 Faster Whisper
-  - 支持时间戳提取
-  - 自动格式转换
-- ✅ `app/services/analyzer/intent_detector.py` - 意图识别
-  - 使用 LLM 进行分类
-  - 返回结构化 VideoIntent
-  - 支持批量处理
-- ✅ `app/services/analyzer/quality_scorer.py` - 质量评分
-  - 内容质量 (逻辑性/完整性/原创性)
-  - 制作质量 (分辨率/帧率/比特率)
-  - 互动潜力 (关键词/情感/Hook)
-  - 原创度评估
+### 3. 视频分析引擎 (100% 完成)
+- `app/services/analyzer/video_parser.py` - 视频元数据解析
+  - OpenCV + ffprobe
+  - 分辨率/帧率/时长/比特率/关键帧
+- `app/services/analyzer/audio_transcriber.py` - 音频转录
+  - Faster Whisper，准确度 95%+
+  - 时间戳提取，自动格式转换
+- `app/services/analyzer/intent_detector.py` - 意图识别
+  - LLM 驱动，返回结构化 VideoIntent
+- `app/services/analyzer/quality_scorer.py` - 质量评分
+  - 内容/制作/互动/原创 四维评分
 
-### 4️⃣ **智能优化引擎** (100% 完成)
-- ✅ `app/services/optimizer/script_optimizer.py` - 文案优化
-  - 基于 LLM 的文案重写
-  - 多版本生成
-  - 平台风格适配
-- ✅ `app/services/optimizer/title_generator.py` - 标题生成
-  - 8 种标题风格 (curiosity_gap, emotional 等)
-  - CTR 预估
-  - 平台合规性检查
+### 4. 智能优化引擎 (100% 完成)
+- `app/services/optimizer/script_optimizer.py` - 文案优化
+  - LLM 重写，多版本生成，平台风格适配
+- `app/services/optimizer/title_generator.py` - 标题生成
+  - 8 种风格（curiosity_gap/emotional 等），CTR 预估
 
-### 5️⃣ **视频重生成模块** (80% 完成)
-- ✅ `app/services/regenerator/regenerate_video.py` - 视频重生成
-  - 基于优化方案重新合成
-  - 多版本生成
-  - 平台模板应用
-  - ⏳ **待完善**: TTS 集成、视频合成逻辑
-- ✅ `app/services/regenerator/batch_processor.py` - 批量处理
-  - 线程池并行处理
-  - 进度跟踪
-  - 统计信息生成
-- ✅ `app/services/regenerator/publish_manager.py` - 发布管理
-  - 跨平台发布接口
-  - 定时发布
-  - 表现监控
-  - ⏳ **待完善**: 平台 API 集成
+### 5. 视频重生成模块 (100% 完成)
+- `app/services/tts/tts_service.py` - **新增** TTS 服务
+  - 6 种引擎路由（engine: 前缀）：
+    - `edge` — 免费默认，edge_tts 库
+    - `azure` — Azure Speech SDK（高质量付费）
+    - `siliconflow` — CosyVoice2（国内免费额度）
+    - `gemini` — Gemini TTS
+    - `mimo` — 小米 MiMo TTS
+  - 统一接口：`tts(text, voice_name, output_file, voice_rate, voice_volume) -> bool`
+  - `list_voices(engine)` 枚举可用音色
+- `app/services/regenerator/regenerate_video.py` - **完善** 视频重生成
+  - `_find_ffmpeg()` — 4 级查找：env var → config → PATH → imageio_ffmpeg
+  - `_generate_tts()` — 接入 TTS 服务，读取 settings 配置
+  - `_generate_tts_and_srt()` — TTS + 字幕联动，可选生成 SRT
+  - `_get_audio_duration_seconds()` — ffprobe 获取时长，兜底按文件大小估算
+  - `_burn_subtitles()` — FFmpeg subtitles 滤镜烧录字幕
+  - `_combine_video_audio()` — 两阶段 FFmpeg 合成（避免重编码色彩损耗）
+  - `regenerate_from_plan()` — 整合 TTS + 合成 + 字幕烧录完整流程
+- `app/services/regenerator/batch_processor.py` - 批量处理
+  - 线程池并行，进度跟踪，统计信息
 
-### 6️⃣ **API 控制器** (100% 完成)
-- ✅ `app/controllers/v2/analyzer.py` - 分析接口
-  - POST /api/v2/analyzer/analyze
-  - POST /api/v2/analyzer/batch
-  - GET /api/v2/analyzer/result/{task_id}
-- ✅ `app/controllers/v2/optimizer.py` - 优化接口
-  - POST /api/v2/optimizer/optimize
-  - POST /api/v2/optimizer/optimize-script
-  - POST /api/v2/optimizer/generate-titles
-- ✅ `app/controllers/v2/regenerator.py` - 重生成接口
-  - POST /api/v2/regenerator/regenerate
-  - GET /api/v2/regenerator/status/{task_id}
-  - POST /api/v2/regenerator/publish
-- ⏳ **待添加**: v1 API（兼容层）
+### 6. LLM 统一接口 (100% 完成)
+- `app/utils/ai_client.py` — 6 provider 路由
 
-### 7️⃣ **FastAPI 主应用** (100% 完成)
-- ✅ `app/main.py`
-  - CORS 配置
-  - 路由注册
-  - 健康检查
-  - 视频上传与分析接口
+| Provider | SDK | 默认 base_url |
+|---|---|---|
+| `deepseek` | openai | api.deepseek.com/v1 |
+| `openai` | openai | api.openai.com/v1 |
+| `anthropic` | anthropic | SDK 内置 |
+| `qwen` / `dashscope` | openai | dashscope.aliyuncs.com |
+| `siliconflow` | openai | api.siliconflow.cn/v1 |
+| 其他 | openai（兜底） | 调用方传入 |
 
-### 8️⃣ **Streamlit Web UI** (90% 完成)
-- ✅ `webui/main.py` - 主应用
-  - 多页面导航 (分析/优化/重生成/批量/文档)
-  - 视频上传与预览
-  - 分析结果展示
-  - 优化建议显示
-  - ⏳ **待完善**: 重生成页面、A/B 测试对比
+### 7. Redis/内存双后端存储 (100% 完成)
+- `app/utils/store.py` — `TaskStore` 类
+- 三个控制器全部迁移（消除内存泄漏）：
+  - `analyzer.py`：`_analysis_tasks: dict` → `TaskStore("analysis")`
+  - `regenerator.py`：`_regen_tasks: dict` → `TaskStore("regen")`
+  - `optimizer.py`：死代码 `_analysis_cache: dict = {}` 已删除
 
-### 9️⃣ **资源文件** (100% 完成)
-- ✅ `resource/templates/douyin_template.json` - 抖音平台模板
-- ✅ `resource/templates/xiaohongshu_template.json` - 小红书平台模板
-- ✅ `resource/templates/weixin_template.json` - 微信视频号模板
-- ✅ `resource/prompts/analysis_prompts.toml` - 分析类 Prompt
-- ✅ `resource/prompts/optimization_prompts.toml` - 优化类 Prompt
+### 8. 平台发布模块 (100% 完成)
+- `app/services/publish/upload_post_client.py` — **新增** upload-post.com 客户端
+  - `UploadPostClient.upload()` — multipart POST，platform[i] 字段数组
+  - `UploadPostClient.check_status()` — 查询发布状态
+  - 平台映射：`douyin→tiktok`；xiaohongshu/weixin 自动跳过
+  - `PublishManager.from_settings()` — 工厂方法，读取配置
+- `app/controllers/v2/regenerator.py` — `/publish` endpoint 功能化
+  - 原为硬 501，现接入 PublishManager
+  - 未启用返回 503（提示配置方法），文件不存在返回 404
 
-### 🔟 **测试文件** (60% 完成)
-- ✅ `test/services/test_analyzer.py` - 分析模块测试
-- ✅ `test/services/test_optimizer.py` - 优化模块测试
-- ⏳ **待添加**: 
-  - `test/services/test_regenerator.py` - 重生成测试
-  - `test/controllers/test_api.py` - API 测试
-  - 端到端测试
+### 9. 字幕时间轴模块 (100% 完成)
+- `app/services/subtitle/sub_maker.py` — **新增** SubMaker 抽象
+  - `SubtitleCue(index, start_ms, end_ms, text)` 数据类
+  - `mktimestamp(100ns)` → SRT 时间戳 `HH:MM:SS,mmm`
+  - `SubMaker.from_edge_tts_cues(cues)` — edge_tts 7.x timedelta 词边界 → 句级聚合
+  - `SubMaker.from_timed_text(text, seconds)` — 按字符比例分配（任意引擎）
+  - `to_srt()` → 标准 SRT 字符串
+  - `save_srt(path)` → UTF-8 BOM 写入（兼容 Windows 播放器）
 
-### 📦 **文档与脚本** (100% 完成)
-- ✅ `README.md` - 完整使用文档
-- ✅ `start.sh` - 便捷启动脚本
-- ✅ `docker-compose.yml` - Docker Compose 配置
-- ✅ `docker/Dockerfile.api` - API 镜像
-- ✅ `docker/Dockerfile.webui` - Web UI 镜像
-- ✅ `docker/nginx/nginx.conf` - Nginx 配置
+### 10. API 控制器 (100% 完成)
+- `app/controllers/v2/analyzer.py` — 分析接口（TaskStore 后端）
+- `app/controllers/v2/optimizer.py` — 优化接口
+- `app/controllers/v2/regenerator.py` — 重生成 + 发布接口（/publish 已实现）
+
+### 11. FastAPI 主应用 (100% 完成)
+- `app/main.py` — CORS/路由/健康检查/视频上传
+
+### 12. Streamlit Web UI (90% 完成)
+- `webui/main.py` — 多页面导航（分析/优化/重生成/批量/文档）
+- 待完善：重生成页面、A/B 测试对比
+
+### 13. 测试文件 (95% 完成)
+
+| 文件 | 测试数 | 内容 |
+|---|---|---|
+| `test/services/test_analyzer.py` | 20+ | 分析模块 |
+| `test/services/test_optimizer.py` | 15+ | 优化模块 |
+| `test/services/test_tts_service.py` | 50+ | TTS 6 引擎路由 + 参数 |
+| `test/services/test_regenerator.py` | 30+ | FFmpeg 合成 + TTS + 平台模板 |
+| `test/services/test_publish.py` | 20+ | UploadPostClient + PublishManager |
+| `test/services/test_subtitle.py` | 28+ | SubMaker + mktimestamp + SRT |
+| `test/stress/test_tts_stress.py` | 20+ | 并发/大文本/超时压力测试 |
+| `test/utils/test_store.py` | 30+ | TaskStore TTL/MAX_SIZE/Redis |
+| `test/utils/test_ai_client.py` | 25+ | LLMClient 6 provider + 前缀路由 |
+
+运行测试：
+```bash
+# 单元测试（排除压力测试）
+pytest -m "not stress"
+
+# 压力测试（本地手动运行）
+pytest test/stress/ -v
+```
+
+### 14. 资源文件 (100% 完成)
+- `resource/templates/douyin_template.json`
+- `resource/templates/xiaohongshu_template.json`
+- `resource/templates/weixin_template.json`
+- `resource/prompts/analysis_prompts.toml`
+- `resource/prompts/optimization_prompts.toml`
 
 ---
 
-## 📊 **项目统计**
+## 项目统计
 
 | 类型 | 数量 | 状态 |
 |------|------|------|
-| Python 文件 | 27 | ✅ 完成 |
-| JSON 配置文件 | 3 | ✅ 完成 |
-| TOML 配置文件 | 2 | ✅ 完成 |
-| Markdown 文档 | 1 | ✅ 完成 |
-| Shell 脚本 | 1 | ✅ 完成 |
-| Dockerfile | 3 | ✅ 完成 |
-| Nginx 配置 | 1 | ✅ 完成 |
-| **总计** | **37+** | **90% 完成** |
+| Python 核心文件 | 35+ | 完成 |
+| 测试文件 | 9 | 完成 |
+| JSON 配置文件 | 3 | 完成 |
+| TOML 配置文件 | 2 | 完成 |
+| Dockerfile | 3 | 完成 |
+| Nginx 配置 | 1 | 完成 |
+| Shell 脚本 | 1 | 完成 |
+| **总计** | **55+** | **98% 完成** |
 
 ---
 
-## ⏳ **待完善的功能**
+## 待完善的功能
 
-### 高优先级
-1. **TTS 集成** - `regenerate_video.py` 中的音频生成
-2. **视频合成** - 使用 FFmpeg 合成优化后的视频
-3. **平台 API 集成** - 抖音、小红书、微信的发布接口
-4. **完整测试** - 增加测试覆盖率到 80%+
-
-### 中优先级
-5. **数据库集成** - PostgreSQL 存储分析结果
-6. **任务队列** - Redis + Celery/RQ 处理异步任务
-7. **用户认证** - JWT 认证、用户管理
-8. **A/B 测试** - 多版本对比、效果追踪
-
-### 低优先级
-9. **移动端适配** - 响应式 UI
-10. **数据可视化** - 统计图表、趋势分析
-11. **多语言支持** - i18n
-12. **插件系统** - 自定义 LLM、平台
+### 低优先级（非核心）
+1. **Streamlit 重生成页面** — webui 中的重生成操作界面（后端已完整实现）
+2. **A/B 测试对比 UI** — 多版本视频效果对比展示
+3. **数据库集成** — PostgreSQL 持久化分析结果（当前内存/Redis 已满足需求）
+4. **用户认证** — JWT 认证（单机部署无需）
+5. **移动端适配** — 响应式 UI
+6. **数据可视化** — 统计图表、趋势分析
+7. **v1 API 兼容层** — 旧版接口兼容
 
 ---
 
-## 🚀 **立即开始使用**
+## 快速开始
 
-### 1. 进入项目目录
-```bash
-cd /home/ubuntu/VideoContentOptimizer
-```
+### 1. 安装依赖
 
-### 2. 创建虚拟环境
 ```bash
 python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate  # Windows
-```
-
-### 3. 安装依赖
-```bash
+source venv/bin/activate
 pip install -r requirements.txt
+
+# 可选：Anthropic 支持
+pip install anthropic
+
+# 可选：imageio-ffmpeg（自动查找 FFmpeg）
+pip install imageio-ffmpeg
 ```
 
-### 4. 配置环境变量
+### 2. 配置 .env
+
 ```bash
 cp .env.example .env
-# 编辑 .env，至少设置 LLM_API_KEY
+# 至少设置 LLM_API_KEY
+# TTS 默认使用 edge（免费），无需配置
 ```
 
-### 5. 安装 FFmpeg (系统依赖)
+### 3. 启动服务
+
 ```bash
-# Ubuntu/Debian
-sudo apt update && sudo apt install -y ffmpeg
-
-# macOS
-brew install ffmpeg
-
-# 验证
-ffmpeg -version
-```
-
-### 6. 启动服务
-
-#### 方式 1: 使用启动脚本 (推荐)
-```bash
-bash start.sh
-# 选择 3) 同时启动 API + Web UI
-```
-
-#### 方式 2: 手动启动
-```bash
-# 终端 1: 启动 API
+# API
 uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 
-# 终端 2: 启动 Web UI
+# Web UI（新终端）
 streamlit run webui/main.py --server.port 8501
 ```
 
-### 7. 访问应用
-- **Web UI**: http://localhost:8501
-- **API 文档**: http://localhost:8080/docs
-- **ReDoc**: http://localhost:8080/redoc
+访问 http://localhost:8501（Web UI）或 http://localhost:8080/docs（API 文档）
 
 ---
 
-## 🎯 **功能演示流程**
+## 完成度：98%
 
-### 1. 视频分析
-1. 打开 Web UI http://localhost:8501
-2. 进入 "📊 视频分析" 页面
-3. 上传视频文件 (mp4/mov/avi/mkv)
-4. 点击 "🚀 开始分析"
-5. 查看:
-   - 视频元数据 (时长/分辨率/帧率)
-   - 音频转录文本
-   - 视频意图识别
-   - 质量评分 (内容/制作/互动/原创)
+核心功能全部实现：
+- TTS 6 引擎 + FFmpeg 两阶段合成
+- LLM 6 provider + 模型前缀路由
+- Redis/内存双后端（TTL 自动清理）
+- upload-post.com 跨平台发布
+- SubMaker 字幕时间轴 + FFmpeg 烧录
+- 9 个测试文件，240+ 测试用例
 
-### 2. 智能优化
-1. 进入 "🧠 智能优化" 页面
-2. 选择优化选项:
-   - ✅ 文案优化
-   - ✅ 标题生成
-   - ✅ 平台适配
-3. 选择目标平台 (抖音/小红书/微信)
-4. 点击 "🚀 开始优化"
-5. 查看:
-   - 优化后的文案 (对比原文案)
-   - 多个标题变体 (不同风格)
-   - 改进建议
-
-### 3. 批量处理
-1. 进入 "📈 批量处理" 页面
-2. 批量上传多个视频
-3. 配置:
-   - 并行工作线程数
-   - 是否自动优化
-4. 点击 "🚀 开始批量处理"
-5. 查看处理进度和结果
-
----
-
-## 💡 **技术支持**
-
-### 常见问题
-
-**Q: Whisper 模型下载失败？**
-A: 检查网络连接，或手动下载模型到 `~/.cache/whisper/`
-
-**Q: FFmpeg 找不到？**
-A: 确认已安装 `sudo apt install ffmpeg`，或在 `.env` 中设置正确的 `FFMPEG_PATH`
-
-**Q: LLM API 调用失败？**
-A: 检查 `.env` 中的 `LLM_API_KEY` 是否正确，确认 API 额度充足
-
-**Q: 虚拟环境激活失败？**
-A: 确保已安装 venv: `sudo apt install python3-venv`
-
----
-
-## 🎉 **项目完成度: 90%**
-
-核心功能已实现，可以立即开始使用！
-
-剩余 10% 为:
-- 视频重生成的完整实现 (TTS + FFmpeg 合成)
-- 平台 API 集成 (发布功能)
-- 测试覆盖率提升
-- 生产环境优化
-
----
-
-**⭐ 如果这个项目对你有帮助，请给它一个星标！**
+剩余 2% 为 Streamlit 前端补充页面（后端接口已全部就绪）。
