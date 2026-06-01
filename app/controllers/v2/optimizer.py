@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.utils.logger import logger
+from app.utils.store import TaskStore
 from app.models.schema import (
     OptimizationPlan, ScriptOptimization, TitleVariant, VideoIntent,
 )
@@ -20,6 +21,9 @@ from app.main import get_evolution_engine
 router = APIRouter(prefix="/optimizer", tags=["优化"])
 
 settings = get_settings()
+
+# 优化结果存储（供 /feedback 端点查询进化上下文，TTL=1h 自动清理）
+_optimize_tasks = TaskStore("optimize")
 
 
 # --- 请求/响应模型 ---
@@ -108,6 +112,16 @@ async def optimize_video(request: OptimizeRequest):
             logger.info(f"标题生成完成: {optimization_id}, {len(titles)} 个标题")
 
         response.status = "completed"
+
+        # 存储进化上下文供 /feedback 端点使用（optimization_id 即为 feedback task_id）
+        _optimize_tasks.set(optimization_id, {
+            "_evolution_context": {
+                "task_type": "optimize",
+                "context": f"platform={request.target_platform}, transcript_len={len(request.transcript)}",
+                "approach": "llm_combined_optimization",
+            }
+        })
+
         return response
 
     except Exception as e:
@@ -130,6 +144,18 @@ async def optimize_script(request: ScriptOptimizeRequest):
             target_platform=request.target_platform,
         )
         logger.info("文案优化完成")
+
+        # 生成 result_id 供 /feedback 端点使用
+        result_id = f"opt_{uuid.uuid4().hex[:12]}"
+        _optimize_tasks.set(result_id, {
+            "_evolution_context": {
+                "task_type": "optimize",
+                "context": f"platform={request.target_platform}, transcript_len={len(request.transcript)}",
+                "approach": "llm_script_optimization",
+            }
+        })
+        result["result_id"] = result_id
+
         return result
 
     except Exception as e:
