@@ -1,35 +1,36 @@
 """
-TTS 压力测试 & 多场景模拟验证
+TTS ѹ������ & �ೡ��ģ����֤
 
-测试场景：
-  A. 并发安全性
-     A1 — 20 线程同时调用 tts()，每个线程独立输出文件，无竞争
-     A2 — 10 线程同时调用不同引擎（edge / siliconflow / mimo 混合）
+���Գ�����
+  A. ������ȫ��
+     A1 �� 20 �߳�ͬʱ���� tts()��ÿ���̶߳�������ļ����޾���
+     A2 �� 10 �߳�ͬʱ���ò�ͬ���棨edge / siliconflow / mimo ��ϣ�
 
-  B. 大文本/边界输入
-     B1 — 5000 字中文文本（超长脚本）
-     B2 — 单字符文本
-     B3 — 包含特殊字符（换行、引号、HTML 实体）
-     B4 — 纯英文文本（跨语言）
+  B. ���ı�/�߽�����
+     B1 �� 5000 �������ı��������ű���
+     B2 �� ���ַ��ı�
+     B3 �� ���������ַ������С����š�HTML ʵ�壩
+     B4 �� ��Ӣ���ı��������ԣ�
 
-  C. 超时与熔断
-     C1 — edge_tts 单次超时（1s）→ TimeoutError 被上层 tts() 捕获 → 返回 False
-     C2 — 20 个超时请求并发 → 所有 False，无线程泄漏
+  C. ��ʱ���۶�
+     C1 �� edge_tts ���γ�ʱ��1s���� TimeoutError ���ϲ� tts() ���� �� ���� False
+     C2 �� 20 ����ʱ���󲢷� �� ���� False�����߳�й©
 
-  D. 再生成流程压力
-     D1 — 10 个视频并发再生成（mock FFmpeg + TTS）
-     D2 — 批量 generate_variants：5 个视频各 3 变体
+  D. ����������ѹ��
+     D1 �� 10 ����Ƶ���������ɣ�mock FFmpeg + TTS��
+     D2 �� ���� generate_variants��5 ����Ƶ�� 3 ����
 
-  E. 资源清理
-     E1 — 100 次连续调用后线程数不超出基线 +5
-     E2 — 临时目录文件不积累（_combine_video_audio 使用 TemporaryDirectory）
+  E. ��Դ����
+     E1 �� 100 ���������ú��߳������������� +5
+     E2 �� ��ʱĿ¼�ļ������ۣ�_combine_video_audio ʹ�� TemporaryDirectory��
 
-所有测试使用 mock，不依赖真实网络/FFmpeg/TTS API。
-pytest -m stress  → 运行本模块
-pytest -m "not stress"  → 跳过
+���в���ʹ�� mock����������ʵ����/FFmpeg/TTS API��
+pytest -m stress  �� ���б�ģ��
+pytest -m "not stress"  �� ����
 """
 
 import os
+import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -41,13 +42,13 @@ import pytest
 pytestmark = pytest.mark.stress
 
 FAKE_FFMPEG = "/fake/ffmpeg"
-TEXT_5000 = "这是一段测试文案，包含各种常见中文内容。" * 250  # 约 5000 字
-TEXT_SPECIAL = '测试文本包含特殊字符：<br/>"引号"、换行\n制表\t和 HTML &amp; 实体。'
+TEXT_5000 = "����һ�β����İ����������ֳ����������ݡ�" * 250  # Լ 5000 ��
+TEXT_SPECIAL = '�����ı����������ַ���<br/>"����"������\n�Ʊ�\t�� HTML &amp; ʵ�塣'
 TEXT_ENGLISH = "This is an English subtitle for a Chinese video, testing cross-language TTS."
-TEXT_SINGLE = "好"
+TEXT_SINGLE = "��"
 
 
-# ─── Fixtures ─────────────────────────────────────────────────────────────────
+# ������ Fixtures ����������������������������������������������������������������������������������������������������������������������������������
 
 @pytest.fixture(autouse=True)
 def _patch_settings(mock_settings, tmp_path):
@@ -62,7 +63,7 @@ def _patch_settings(mock_settings, tmp_path):
 
 
 def _make_edge_module_with_latency(latency=0.0, output_bytes=b"\xff\xfb\x90\x00" + b"\x00" * 64):
-    """构造模拟 edge_tts，save() 有 latency 延迟。"""
+    """����ģ�� edge_tts��save() �� latency �ӳ١�"""
     import asyncio
 
     async def fake_save(path):
@@ -95,14 +96,14 @@ def _make_openai_mock():
     return openai_mock
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# A. 并发安全性
-# ═══════════════════════════════════════════════════════════════════════════════
+# �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
+# A. ������ȫ��
+# �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
 
 class TestConcurrentSafety:
 
     def test_a1_twenty_threads_no_race_condition(self, tmp_path):
-        """20 个线程各自独立输出文件，全部成功，无文件冲突。"""
+        """20 ���̸߳��Զ�������ļ���ȫ���ɹ������ļ���ͻ��"""
         edge_module = _make_edge_module_with_latency(latency=0.01)
         results = {}
 
@@ -111,7 +112,7 @@ class TestConcurrentSafety:
             with patch.dict("sys.modules", {"edge_tts": edge_module}):
                 from app.services.tts import tts_service
                 import importlib; importlib.reload(tts_service)
-                ok = tts_service._edge_tts(f"文本{idx}", "zh-CN-XiaoxiaoNeural", output)
+                ok = tts_service._edge_tts(f"�ı�{idx}", "zh-CN-XiaoxiaoNeural", output)
             results[idx] = (ok, os.path.exists(output))
 
         threads = [threading.Thread(target=worker, args=(i,)) for i in range(20)]
@@ -122,11 +123,11 @@ class TestConcurrentSafety:
 
         assert len(results) == 20
         for idx, (ok, exists) in results.items():
-            assert ok is True, f"线程 {idx} 失败"
-            assert exists, f"线程 {idx} 文件未创建"
+            assert ok is True, f"�߳� {idx} ʧ��"
+            assert exists, f"�߳� {idx} �ļ�δ����"
 
     def test_a2_mixed_engines_concurrent(self, tmp_path, mock_settings):
-        """edge / siliconflow / mimo 混合并发，各引擎互不干扰。"""
+        """edge / siliconflow / mimo ��ϲ����������滥�����š�"""
         edge_module = _make_edge_module_with_latency(latency=0.005)
         sf_resp = _make_siliconflow_mock()
         openai_mock = _make_openai_mock()
@@ -145,7 +146,7 @@ class TestConcurrentSafety:
                  patch("app.config.get_settings", return_value=mock_settings):
                 from app.services.tts import tts_service
                 import importlib; importlib.reload(tts_service)
-                ok = tts_service.tts(f"文本{idx}", voice, output)
+                ok = tts_service.tts(f"�ı�{idx}", voice, output)
             results[idx] = ok
 
         threads = [threading.Thread(target=worker, args=(i, v, e)) for i, (v, e) in enumerate(tasks)]
@@ -155,15 +156,15 @@ class TestConcurrentSafety:
             t.join(timeout=30)
 
         assert len(results) == 20
-        # 允许 siliconflow/mimo 在 mock 环境下失败（import 可能不一致），
-        # 但 edge 引擎全部必须成功
+        # ���� siliconflow/mimo �� mock ������ʧ�ܣ�import ���ܲ�һ�£���
+        # �� edge ����ȫ������ɹ�
         edge_results = [results[i] for i, (_, e) in enumerate(tasks) if e == "edge"]
-        assert all(edge_results), "edge 引擎并发失败"
+        assert all(edge_results), "edge ���沢��ʧ��"
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# B. 大文本 / 边界输入
-# ═══════════════════════════════════════════════════════════════════════════════
+# �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
+# B. ���ı� / �߽�����
+# �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
 
 class TestBoundaryInputs:
 
@@ -172,10 +173,10 @@ class TestBoundaryInputs:
         return _make_edge_module_with_latency(latency=0.0)
 
     @pytest.mark.parametrize("text,label", [
-        (TEXT_5000,   "5000字中文"),
-        (TEXT_SINGLE, "单字符"),
-        (TEXT_SPECIAL, "特殊字符"),
-        (TEXT_ENGLISH, "英文"),
+        (TEXT_5000,   "5000������"),
+        (TEXT_SINGLE, "���ַ�"),
+        (TEXT_SPECIAL, "�����ַ�"),
+        (TEXT_ENGLISH, "Ӣ��"),
     ])
     def test_b_text_variants(self, tmp_path, edge_module, text, label):
         output = str(tmp_path / f"boundary_{label}.mp3")
@@ -183,11 +184,11 @@ class TestBoundaryInputs:
             from app.services.tts import tts_service
             import importlib; importlib.reload(tts_service)
             result = tts_service._edge_tts(text, "zh-CN-XiaoxiaoNeural", output)
-        assert result is True, f"文本类型 '{label}' 测试失败"
+        assert result is True, f"�ı����� '{label}' ����ʧ��"
         assert os.path.exists(output)
 
     def test_b1_5000_char_does_not_truncate(self, tmp_path, edge_module):
-        """5000 字文本被完整传入 Communicate，不被截断。"""
+        """5000 ���ı����������� Communicate�������ضϡ�"""
         captured_text = {}
 
         class CaptureCommunicate:
@@ -207,9 +208,9 @@ class TestBoundaryInputs:
         assert len(captured_text.get("text", "")) == len(TEXT_5000)
 
     def test_b3_special_chars_in_azure_ssml(self, tmp_path, mock_settings):
-        """特殊字符在 Azure SSML 中不应破坏 XML 结构（& 等）。"""
+        """�����ַ��� Azure SSML �в�Ӧ�ƻ� XML �ṹ��& �ȣ���"""
         mock_settings.AZURE_SPEECH_KEY = "key"
-        text_with_amp = "价格 & 质量 > 竞品，<br/> 效果更好"
+        text_with_amp = "�۸� & ���� > ��Ʒ��<br/> Ч������"
 
         speechsdk = MagicMock()
         speechsdk.SpeechSynthesisOutputFormat.Audio48Khz192KBitRateMonoMp3 = "fmt"
@@ -229,18 +230,18 @@ class TestBoundaryInputs:
                 from app.services.tts import tts_service
                 import importlib; importlib.reload(tts_service)
                 result = tts_service._azure_tts(text_with_amp, "zh-CN-XiaoxiaoNeural", output)
-        # 不抛异常即通过（XML 解析由 Azure SDK 负责，我们验证不崩溃）
+        # �����쳣��ͨ����XML ������ Azure SDK ����������֤��������
         assert result is True
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# C. 超时与熔断
-# ═══════════════════════════════════════════════════════════════════════════════
+# �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
+# C. ��ʱ���۶�
+# �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
 
 class TestTimeoutAndCircuitBreaker:
 
     def test_c1_single_timeout_returns_false(self, tmp_path):
-        """单次 edge_tts 超时被 tts() 捕获，返回 False 不抛出。"""
+        """���� edge_tts ��ʱ�� tts() ���񣬷��� False ���׳���"""
         import asyncio
 
         async def hang(path):
@@ -255,12 +256,12 @@ class TestTimeoutAndCircuitBreaker:
         with patch.dict("sys.modules", {"edge_tts": mock_module}):
             from app.services.tts import tts_service
             import importlib; importlib.reload(tts_service)
-            # 直接测试 _edge_tts 的超时
+            # ֱ�Ӳ��� _edge_tts �ĳ�ʱ
             with pytest.raises(TimeoutError):
                 tts_service._edge_tts("text", "zh-CN-XiaoxiaoNeural", output, timeout=1)
 
     def test_c1_tts_entry_catches_timeout(self, tmp_path):
-        """tts() 入口层：引擎超时 → 返回 False。"""
+        """tts() ��ڲ㣺���泬ʱ �� ���� False��"""
         import asyncio
 
         async def hang(path):
@@ -276,7 +277,7 @@ class TestTimeoutAndCircuitBreaker:
             from app.services.tts import tts_service
             import importlib; importlib.reload(tts_service)
 
-            # patch _edge_tts 使其在 timeout=1 下超时
+            # patch _edge_tts ʹ���� timeout=1 �³�ʱ
             original_edge = tts_service._edge_tts
 
             def edge_with_short_timeout(text, voice, output_file, rate=0, timeout=60):
@@ -287,7 +288,7 @@ class TestTimeoutAndCircuitBreaker:
         assert result is False
 
     def test_c2_twenty_concurrent_timeouts_no_thread_leak(self, tmp_path):
-        """20 并发超时不导致线程泄漏（线程数恢复到基线 +5 以内）。"""
+        """20 ������ʱ�������߳�й©���߳����ָ������� +5 ���ڣ���"""
         import asyncio
 
         async def hang(path):
@@ -318,20 +319,20 @@ class TestTimeoutAndCircuitBreaker:
         for t in threads:
             t.join(timeout=10)
 
-        # 等待 daemon 线程自然退出
+        # �ȴ� daemon �߳���Ȼ�˳�
         time.sleep(0.2)
 
-        assert all(v is False for v in results.values()), "所有超时应返回 False"
+        assert all(v is False for v in results.values()), "���г�ʱӦ���� False"
 
         final_threads = threading.active_count()
-        # daemon 线程最多 +5（每个 worker 产生一个 daemon thread，应已结束）
+        # daemon �߳���� +5��ÿ�� worker ����һ�� daemon thread��Ӧ�ѽ�����
         assert final_threads <= baseline_threads + 5, \
-            f"线程泄漏：基线 {baseline_threads}，当前 {final_threads}"
+            f"�߳�й©������ {baseline_threads}����ǰ {final_threads}"
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# D. 再生成流程压力
-# ═══════════════════════════════════════════════════════════════════════════════
+# �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
+# D. ����������ѹ��
+# �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
 
 class TestRegenerationStress:
 
@@ -345,14 +346,14 @@ class TestRegenerationStress:
 
     def test_d1_ten_concurrent_regenerations(self, regenerator, tmp_path,
                                                optimization_plan_with_script):
-        """10 个视频并发再生成，全部成功完成。"""
+        """10 ����Ƶ���������ɣ�ȫ���ɹ���ɡ�"""
         ok_result = MagicMock(returncode=0, stderr="")
         results = {}
 
         def worker(idx):
             video = str(tmp_path / f"video_{idx}.mp4")
             out = str(tmp_path / f"out_{idx}.mp4")
-            # 创建假视频文件
+            # ��������Ƶ�ļ�
             with open(video, "wb") as f:
                 f.write(b"\x00" * 64)
 
@@ -377,10 +378,10 @@ class TestRegenerationStress:
 
         assert len(results) == 10
         for idx, r in results.items():
-            assert not isinstance(r, str) or "out_" in r, f"任务 {idx} 失败: {r}"
+            assert not isinstance(r, str) or "out_" in r, f"���� {idx} ʧ��: {r}"
 
     def test_d2_batch_generate_variants(self, regenerator, tmp_path, optimization_plan_with_script):
-        """5 个视频各 3 变体批量生成，共 10 次调用（plan 只有 2 变体）。"""
+        """5 ����Ƶ�� 3 �����������ɣ��� 10 �ε��ã�plan ֻ�� 2 ���壩��"""
         call_count = {"n": 0}
 
         def fake_regen(original_video_path, optimization_plan, variant_id="v1", output_path=None):
@@ -402,14 +403,14 @@ class TestRegenerationStress:
             results = regenerator.generate_variants(video, optimization_plan_with_script, num_variants=3)
             all_results.extend(results)
 
-        # plan 有 2 个变体，num_variants=3 被 min 截断为 2，共 5×2=10 次调用
+        # plan �� 2 �����壬num_variants=3 �� min �ض�Ϊ 2���� 5��2=10 �ε���
         assert call_count["n"] == 10
         assert len(all_results) == 10
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# E. 资源清理
-# ═══════════════════════════════════════════════════════════════════════════════
+# �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
+# E. ��Դ����
+# �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
 
 class TestResourceCleanup:
 
@@ -422,7 +423,7 @@ class TestResourceCleanup:
         return r
 
     def test_e1_thread_count_stable_after_100_tts(self, tmp_path):
-        """100 次连续 TTS 后线程数不超过基线 +5（无线程泄漏）。"""
+        """100 ������ TTS ���߳������������� +5�����߳�й©����"""
         edge_module = _make_edge_module_with_latency(latency=0.0)
         baseline = threading.active_count()
 
@@ -431,22 +432,22 @@ class TestResourceCleanup:
             import importlib; importlib.reload(tts_service)
             for i in range(100):
                 output = str(tmp_path / f"cleanup_{i}.mp3")
-                tts_service._edge_tts(f"文本{i}", "zh-CN-XiaoxiaoNeural", output)
+                tts_service._edge_tts(f"�ı�{i}", "zh-CN-XiaoxiaoNeural", output)
 
-        # 等待 daemon 线程结束
+        # �ȴ� daemon �߳̽���
         time.sleep(0.3)
         assert threading.active_count() <= baseline + 5
 
     def test_e2_combine_temp_directory_cleaned_up(self, regenerator, tmp_video, tmp_audio,
                                                     output_path, tmp_path):
-        """_combine_video_audio 使用 TemporaryDirectory，结束后临时目录已删除。"""
+        """_combine_video_audio ʹ�� TemporaryDirectory����������ʱĿ¼��ɾ����"""
         ok = MagicMock(returncode=0, stderr="")
         temp_dirs_seen = []
 
-        original_run = __import__("subprocess").run
+        original_run = subprocess.run
 
         def capture_run(cmd, **kwargs):
-            # 记录 stage1 输出路径（即临时目录内的 silent.mp4）
+            # ��¼ stage1 ���·��������ʱĿ¼�ڵ� silent.mp4��
             if "-an" in cmd:
                 silent_path = cmd[cmd.index("-an") + 2] if "-an" in cmd else None
                 for arg in cmd:
@@ -458,16 +459,17 @@ class TestResourceCleanup:
         with patch("subprocess.run", side_effect=capture_run):
             regenerator._combine_video_audio(tmp_video, tmp_audio, output_path)
 
-        # 验证临时目录已被清理
+        # ��֤��ʱĿ¼�ѱ�����
         for d in temp_dirs_seen:
-            assert not os.path.exists(d), f"临时目录未清理: {d}"
+            assert not os.path.exists(d), f"��ʱĿ¼δ����: {d}"
 
     def test_e2_combine_does_not_leave_silent_video(self, regenerator, tmp_video, tmp_audio,
                                                       output_path, tmp_path):
-        """两阶段合成完成后，silent.mp4 中间文件不应残留在 temp_dir 中。"""
+        """���׶κϳ���ɺ�silent.mp4 �м��ļ���Ӧ������ temp_dir �С�"""
         ok = MagicMock(returncode=0, stderr="")
         with patch("subprocess.run", return_value=ok):
             regenerator._combine_video_audio(tmp_video, tmp_audio, output_path)
 
         silent_files = [f for f in os.listdir(tmp_path) if "silent" in f]
-        assert len(silent_files) == 0, f"silent 文件残留: {silent_files}"
+        assert len(silent_files) == 0, f"silent �ļ�����: {silent_files}"
+
