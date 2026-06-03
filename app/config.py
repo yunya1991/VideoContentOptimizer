@@ -1,0 +1,193 @@
+"""
+配置管理模块
+"""
+
+import warnings
+from pydantic_settings import BaseSettings
+from pydantic import field_validator
+from typing import Optional, List
+from functools import lru_cache
+
+
+class Settings(BaseSettings):
+    """应用配置"""
+
+    # LLM 配置
+    LLM_PROVIDER: str = "deepseek"
+    LLM_API_KEY: str = ""
+    LLM_BASE_URL: Optional[str] = None
+    LLM_MODEL: str = "deepseek-chat"
+    ANTHROPIC_API_KEY: str = ""   # Anthropic Claude；LLM_PROVIDER=anthropic 时使用
+
+    # Whisper 配置
+    WHISPER_MODEL_SIZE: str = "base"
+    WHISPER_DEVICE: str = "cpu"
+    WHISPER_COMPUTE_TYPE: str = "int8"
+
+    # 视频处理
+    FFMPEG_PATH: str = "/usr/bin/ffmpeg"
+    TEMP_DIR: str = "/tmp/video_optimizer"
+    MAX_VIDEO_SIZE_MB: int = 500
+    ALLOWED_EXTENSIONS: List[str] = ["mp4", "mov", "avi", "mkv"]
+
+    @field_validator("ALLOWED_EXTENSIONS", mode="before")
+    @classmethod
+    def parse_extensions(cls, v):
+        if isinstance(v, str):
+            return [ext.strip().lower() for ext in v.split(",") if ext.strip()]
+        return v
+
+    # TTS 配置
+    # voice_name 格式：engine:voice，例如 edge:zh-CN-XiaoxiaoNeural
+    # 支持引擎：edge（免费默认）/ azure / siliconflow / gemini / mimo
+    TTS_VOICE_NAME: str = "edge:zh-CN-XiaoxiaoNeural"
+    TTS_VOICE_RATE: int = 0        # 语速百分比，0=原速，正数加速，负数减速
+    TTS_VOICE_VOLUME: float = 1.0  # 音量倍数（1.0=原始）
+
+    # Azure Speech SDK（付费，高质量）
+    AZURE_SPEECH_KEY: str = ""
+    AZURE_SPEECH_REGION: str = "eastus"
+
+    # SiliconFlow CosyVoice2（国内，有免费额度）
+    SILICONFLOW_API_KEY: str = ""
+
+    # Gemini TTS
+    GEMINI_API_KEY: str = ""
+
+    # MiMo TTS（小米）
+    MIMO_API_KEY: str = ""
+
+    # 平台发布（upload-post.com）
+    # 支持: tiktok, youtube, instagram, facebook, twitter, linkedin, pinterest
+    # 本项目映射: douyin→tiktok; xiaohongshu/weixin 不支持，自动跳过
+    UPLOAD_POST_ENABLED: bool = False
+    UPLOAD_POST_API_KEY: str = ""
+    UPLOAD_POST_USERNAME: str = ""
+    UPLOAD_POST_PLATFORMS: List[str] = ["tiktok"]
+
+    @field_validator("UPLOAD_POST_PLATFORMS", mode="before")
+    @classmethod
+    def parse_upload_platforms(cls, v):
+        if isinstance(v, str):
+            return [p.strip().lower() for p in v.split(",") if p.strip()]
+        return v
+
+    # 字幕烧录（FFmpeg subtitles 滤镜）
+    SUBTITLE_ENABLED: bool = False
+    SUBTITLE_FONT_SIZE: int = 36
+    SUBTITLE_FONT_COLOR: str = "white"
+    SUBTITLE_POSITION: str = "bottom"   # bottom / top / center
+
+    # 存储配置
+    STORAGE_TYPE: str = "local"
+    LOCAL_STORAGE_PATH: str = "./storage"
+
+    # Redis 配置
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_PASSWORD: Optional[str] = None
+
+    # PostgreSQL 配置
+    POSTGRES_HOST: str = "localhost"
+    POSTGRES_PORT: int = 5432
+    POSTGRES_DB: str = "videooptimizer"
+    POSTGRES_USER: str = "admin"
+    POSTGRES_PASSWORD: str = ""
+
+    # Web UI
+    STREAMLIT_PORT: int = 8501
+    STREAMLIT_THEME: str = "light"
+
+    # API
+    API_HOST: str = "0.0.0.0"
+    API_PORT: int = 8080
+    API_DEBUG: bool = False
+
+    # CORS
+    CORS_ORIGINS: List[str] = ["*"]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors(cls, v):
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
+    # 平台
+    DEFAULT_PLATFORM: str = "douyin"
+    ENABLE_CROSS_PLATFORM: bool = True
+
+    # 批处理
+    BATCH_SIZE: int = 4
+    PARALLEL_WORKERS: int = 2
+    MAX_BATCH_VIDEOS: int = 50
+
+    # 日志
+    LOG_LEVEL: str = "INFO"
+    LOG_FILE: str = "./logs/video_optimizer.log"
+
+    # 安全
+    SECRET_KEY: str = "your-secret-key-here"
+    JWT_SECRET: str = "your-jwt-secret-here"
+    TOKEN_EXPIRE_HOURS: int = 24
+
+    # 项目根目录（进化引擎数据存储位置）
+    PROJECT_ROOT: str = "."
+
+    # 功能开关
+    ENABLE_AUDIO_TRANSCRIPTION: bool = True
+    ENABLE_VISUAL_ANALYSIS: bool = True
+    ENABLE_LLM_OPTIMIZATION: bool = True
+    ENABLE_PLATFORM_ADAPTATION: bool = True
+    ENABLE_BATCH_PROCESSING: bool = True
+    ENABLE_A_B_TESTING: bool = False
+
+    # 监控
+    ENABLE_METRICS: bool = True
+    METRICS_PORT: int = 9090
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+
+_WEAK_SECRET_KEYS = {"your-secret-key-here", "your-jwt-secret-here", ""}
+
+_KEY_GEN_HINT = (
+    "生成安全密钥命令：python -c \"import secrets; print(secrets.token_hex(32))\""
+)
+
+
+@lru_cache()
+def get_settings():
+    """获取配置单例"""
+    settings = Settings()
+
+    secret_weak = settings.SECRET_KEY in _WEAK_SECRET_KEYS
+    jwt_weak = settings.JWT_SECRET in _WEAK_SECRET_KEYS
+
+    if secret_weak or jwt_weak:
+        weak_fields = []
+        if secret_weak:
+            weak_fields.append("SECRET_KEY")
+        if jwt_weak:
+            weak_fields.append("JWT_SECRET")
+        fields_str = " 和 ".join(weak_fields)
+
+        if not settings.API_DEBUG:
+            # 生产模式：拒绝启动，防止弱密钥被部署到公网
+            raise RuntimeError(
+                f"[安全] 生产环境禁止使用默认弱密钥：{fields_str}。\n"
+                f"请在 .env 中设置强密钥后重启。\n{_KEY_GEN_HINT}"
+            )
+        else:
+            # 调试模式：警告但允许启动
+            warnings.warn(
+                f"{fields_str} 使用默认弱密钥，仅允许在调试模式（API_DEBUG=true）下运行。"
+                f"部署到生产环境前请务必修改。{_KEY_GEN_HINT}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+    return settings

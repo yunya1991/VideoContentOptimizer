@@ -1,0 +1,69 @@
+{
+  "name": "抖音视频模板",
+  "platform": "douyin",
+  "description": "抖音平台标准视频模板",
+  "optimal_specs": {
+    "resolution": "1080x1920 (9:16)",
+    "fps": 25,
+    "duration_range": [15, 60],
+    "bitrate": "2000-3000 kbps",
+    "codec": "H.264"
+  },
+  "content_structure": {
+    "hook": {
+      "duration": "0-3秒",
+      "purpose": "吸引用户停留",
+      "techniques": ["疑问句", "视觉冲击", "痛点直击", "悬念设置"]
+    },
+    "main_content": {
+      "duration": "3-50秒",
+      "purpose": "传递核心价值",
+      "techniques": ["信息密度适中", "节奏感强", "视觉丰富"]
+    },
+    "cta": {
+      "duration": "最后3-5秒",
+      "purpose": "引导互动",
+      "techniques": ["点赞引导", "关注引导", "评论引导", "分享引导"]
+    }
+  },
+  "editing_style": {
+    "cut_frequency": "1-2秒/次",
+    "transitions": ["快切", "缩放", "旋转"],
+    "effects": ["抖动", "闪白", "色彩强化"],
+    "music": "卡点音乐，节奏感强"
+  },
+  "text_overlay": {
+    "title": {
+      "font_size": "大",
+      "position": "上方1/3处",
+      "duration": "全程或半程"
+    },
+    "key_points": {
+      "font_size": "中",
+      "position": "中间或下方",
+      "duration": "3-5秒/点"
+    },
+    "cta_text": {
+      "font_size": "中到大",
+      "position": "底部",
+      "duration": "最后5秒"
+    }
+  },
+  "hashtags": {
+    "count": "3-5个",
+    "placement": "标题或评论区",
+    "strategy": "热门话题 + 核心关键词"
+  },
+  "best_posting_times": [
+    "07:00-09:00",
+    "12:00-13:00",
+    "18:00-19:00",
+    "21:00-23:00"
+  ],
+  "algorithm_factors": {
+    "completion_rate": "完播率 - 最重要",
+    "engagement_rate": "点赞、评论、分享率",
+    "follower_conversion": "关注转化率",
+    "sharing": "分享到社交圈"
+  }
+}

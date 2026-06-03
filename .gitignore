@@ -1,0 +1,113 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 虚拟环境
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 日志
+logs/
+*.log
+
+# 数据库
+*.db
+*.sqlite
+*.sqlite3
+
+# 存储目录
+storage/
+temp/
+tmp/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wav
+*.mp3
+
+# 测试覆盖率
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# PyTorch 模型缓存
+*.pth
+*.pt
+*.ckpt
+
+# Whisper 模型缓存
+~/.cache/whisper/
+.whisper/
+
+# Streamlit
+.streamlit/
+
+# FastAPI
+app/__pycache__/
+app/**/__pycache__/
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*~
+
+# 操作系统
+Thumbs.db
+.DS_Store
+
+# 项目特定
+test/resources/sample_video.mp4
+test/resources/
+
+# Evolution runtime data
+.evolution/
+
+# 模型文件（超过 GitHub 100MB 限制）
+models/

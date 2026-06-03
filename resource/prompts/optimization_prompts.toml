@@ -1,0 +1,198 @@
+# 视频优化类 Prompt
+
+[SCRIPT_OPTIMIZATION]
+prompt = """
+你是短视频文案优化专家。分析并优化下列视频文案：
+
+【原文案】
+{original_script}
+
+【视频类型】
+{category} - {sub_category}
+
+【目标平台】
+{platform}
+
+【目标受众】
+{target_audience}
+
+【情感基调】
+{emotion}
+
+请优化文案，使其具备以下特点：
+1. 前5秒就能吸引用户 (Hook机制)
+2. 信息密度合理，节奏感强
+3. 有明确的 CTA (行动号召)
+4. 符合{platform}平台用语习惯
+5. 增加情感共鸣，引发互动
+
+优化维度详解：
+- Hook: 开头要有悬念、疑问、惊喜或痛点
+- 节奏: 每15-20秒一个小高潮
+- CTA: 结尾引导点赞、关注、评论、分享
+- 平台化: 使用平台流行语和表达方式
+- 情感: 激发用户情绪，促使其互动
+
+返回 JSON:
+{{
+  "optimized_script": "优化后的完整文案，保留原意但更具吸引力",
+  "changes": [
+    "改进点1: 原开头较平淡，改为疑问式开头增加悬念",
+    "改进点2: 中段增加情感共鸣点，引发用户认同",
+    "改进点3: 结尾增加明确的CTA，引导用户互动"
+  ],
+  "readability_improvement": 15,
+  "engagement_increase": 20,
+  "hook_strength_before": 5.0,
+  "hook_strength_after": 8.5,
+  "cta_effectiveness": "strong"
+}}
+
+重要：只返回标准 JSON，不要有其他说明文字。
+"""
+
+[TITLE_GENERATION]
+prompt = """
+你是短视频标题优化专家。为以下视频生成{num_titles}个不同风格的标题：
+
+【核心内容】
+{transcript}
+
+【关键词】
+{keywords}
+
+【视频类型】
+{category} - {sub_category}
+
+【目标平台】
+{platform}
+
+请生成 {num_titles} 个标题，每个使用不同风格：
+- curiosity_gap (好奇心缺口) - 制造悬念，让人想知道答案
+- emotional (情感共鸣) - 激发情感，引发共鸣
+- practical (实用价值) - 强调实用性和价值
+- controversy (争议讨论) - 制造争议，引发讨论
+- benefit (收益承诺) - 承诺具体收益
+- fomo (紧迫感) - 制造错失恐惧，强调不看的损失
+- celebrity (名人效应) - 借助名人或案例
+- number (数字列表) - 用数字吸引眼球
+
+每个标题需包含：
+- title: 标题文本 (不超过30字)
+- style: 使用的风格
+- estimated_ctr: 预估点击率 (0-1)
+- rationale: 为什么这个标题有效
+
+返回 JSON:
+{{
+  "titles": [
+    {{
+      "title": "他用30天从0学会编程，年薪涨20万！",
+      "style": "benefit",
+      "estimated_ctr": 0.18,
+      "rationale": "承诺具体收益，数字吸引眼球，激发用户学习的欲望"
+    }},
+    {{
+      "title": "30天编程速成，已有10万人学会，你还在等什么？",
+      "style": "fomo",
+      "estimated_ctr": 0.15,
+      "rationale": "制造紧迫感，利用从众心理，促使用户行动"
+    }}
+  ],
+  "best_style_for_platform": "benefit",
+  "platform_title_rules": "抖音标题建议简短有力，多用感叹号和数字"
+}}
+
+重要：只返回标准 JSON，不要有其他说明文字。
+"""
+
+[TREND_PREDICTION]
+prompt = """
+你是短视频热度分析专家。预测以下视频的热度潜力：
+
+【关键词】
+{keywords}
+
+【内容摘要】
+{content}
+
+【视频类型】
+{category}
+
+【当前热点话题】
+{trending_topics}
+
+请评估视频的热度潜力：
+
+评估维度：
+1. 热度评分 (0-100) - 综合评估
+2. 与当前热点的相关度 - 是否蹭到热点
+3. 增长潜力 - high/medium/low
+4. 预期达到高峰的时间 - 多少天
+5. 类似的爆款视频案例 - 作为参考
+6. 推荐发布策略 - 如何最大化热度
+
+返回 JSON:
+{{
+  "trend_score": 78,
+  "growth_potential": "high",
+  "peak_time_days": 7,
+  "similar_viral_cases": [
+    "案例1: 某博主30天学会Python视频获得500万播放",
+    "案例2: 零基础编程教程类视频普遍表现良好"
+  ],
+  "recommendation": "建议在晚上8-10点发布，配合#编程 #零基础 #自学 等标签",
+  "estimated_views": "50-100万",
+  "viral_probability": 0.35,
+  "optimal_hashtags": ["#编程", "#零基础", "#自学", "#30天挑战", "#涨薪"]
+}}
+
+重要：只返回标准 JSON，不要有其他说明文字。
+"""
+
+[PLATFORM_ADAPTATION]
+prompt = """
+你是短视频平台适配专家。为以下视频生成平台适配方案：
+
+【视频信息】
+- 类型: {category}
+- 时长: {duration}秒
+- 目标受众: {target_audience}
+
+【需要适配的平台】
+{platforms}
+
+请为每个平台生成适配方案，包括：
+1. 平台特有的文案风格
+2. 推荐标签和话题
+3. 最佳发布时间
+4. 视频格式建议
+5. 封面设计建议
+
+返回 JSON:
+{{
+  "adaptations": {{
+    "douyin": {{
+      "platform_name": "抖音",
+      "title_style": "简短有力，多用数字和感叹号",
+      "recommended_tags": ["#编程", "#零基础", "#30天挑战"],
+      "best_posting_time": "晚上8-10点",
+      "video_format": "9:16竖屏",
+      "cover_suggestion": "使用对比色，大字标题，人物表情夸张",
+      "content_adjustment": "节奏要快，每5秒一个转折点"
+    }},
+    "xiaohongshu": {{
+      "platform_name": "小红书",
+      "title_style": "精致实用，强调干货和价值",
+      "recommended_tags": ["#编程学习", "#自学攻略", "#技能提升"],
+      "best_posting_time": "早上7-9点或晚上7-9点",
+      "video_format": "9:16竖屏或1:1方屏",
+      "cover_suggestion": "精美封面，简洁文字，高质感",
+      "content_adjustment": "增加教程性质，更详细的步骤说明"
+    }}
+  }},
+  "cross_platform_strategy": "建议先在抖音测试，再同步到小红书和微信视频号"
+}}
+
+重要：只返回标准 JSON，不要有其他说明文字。
+"""
