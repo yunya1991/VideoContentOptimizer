@@ -7,11 +7,16 @@ API v2 - 浏览器自动化上传控制器
   GET    /api/v2/browser-upload/platforms       列出支持的平台
   GET    /api/v2/browser-upload/health          CDP 浏览器健康检查
   POST   /api/v2/browser-upload/session-check   检查浏览器访问状态
+
+设计要点：
+- 所有 CDP 地址来自 app.config.CDP_URL（单一真相源）
+- 临时文件目录来自 app.config.TEMP_DIR，避免 /tmp 权限差异
+- 文件大小校验基于 app.config.MAX_VIDEO_SIZE_MB
 """
 
 import os
 import uuid
-import tempfile
+import time
 from typing import List, Optional
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Query
@@ -68,27 +73,22 @@ class SessionCheckResponse(BaseModel):
 # ─── 内部工具 ─────────────────────────────────────────────────
 
 def _get_cdp_url(override: Optional[str] = None) -> str:
-    """获取 CDP URL：优先使用请求参数，其次使用配置"""
+    """获取 CDP URL：优先使用请求参数，其次使用 app.config.CDP_URL（单一真相源）"""
     if override:
         return override
-    # 从配置获取（若配置中未定义则用默认）
-    return getattr(settings, "CDP_URL", "http://127.0.0.1:9223")
+    return settings.CDP_URL
 
 
 def _save_uploaded_file(file: UploadFile) -> str:
-    """保存上传的视频文件到临时目录，返回路径"""
+    """保存上传的视频文件到 settings.TEMP_DIR，返回绝对路径"""
     safe_name = os.path.basename(file.filename or f"video_{uuid.uuid4().hex}.mp4")
     unique_name = f"{uuid.uuid4().hex}_{safe_name}"
-    temp_dir = settings.TEMP_DIR if hasattr(settings, "TEMP_DIR") else tempfile.gettempdir()
+    temp_dir = settings.TEMP_DIR
     os.makedirs(temp_dir, exist_ok=True)
     temp_path = os.path.join(temp_dir, unique_name)
 
     total_size = 0
-    max_bytes = (
-        (settings.MAX_VIDEO_SIZE_MB if hasattr(settings, "MAX_VIDEO_SIZE_MB") else 500)
-        * 1024
-        * 1024
-    )
+    max_bytes = settings.MAX_VIDEO_SIZE_MB * 1024 * 1024
 
     with open(temp_path, "wb") as buffer:
         while True:
@@ -101,7 +101,7 @@ def _save_uploaded_file(file: UploadFile) -> str:
                 os.remove(temp_path)
                 raise HTTPException(
                     status_code=413,
-                    detail=f"文件过大，最大允许 {max_bytes // 1024 // 1024} MB",
+                    detail=f"文件过大，最大允许 {settings.MAX_VIDEO_SIZE_MB} MB",
                 )
             buffer.write(chunk)
 
