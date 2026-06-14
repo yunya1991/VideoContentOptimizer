@@ -72,7 +72,7 @@ class Settings(BaseSettings):
             return [p.strip().lower() for p in v.split(",") if p.strip()]
         return v
 
-    # CDP 浏览器自动化上传（tencent-novnc-chromium-cdp Skill）
+    # CDP 浏览器自动化上传（video-upload-browser Skill）
     # 用于无 API 的平台：抖音/小红书/B站/微信视频号/YouTube/TikTok
     # 需要先部署并启动远程浏览器（noVNC + Chromium + CDP）
     CDP_URL: str = "http://127.0.0.1:9223"
@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     CDP_VIEWPORT_HEIGHT: int = 1080
     # 单个视频上传等待转码的最大秒数
     CDP_UPLOAD_TIMEOUT: int = 300
+    # 失败重试次数
+    CDP_MAX_RETRY: int = 3
+    # 每次重试间隔（秒）
+    CDP_RETRY_DELAY: float = 2.0
 
     # 字幕烧录（FFmpeg subtitles 滤镜）
     SUBTITLE_ENABLED: bool = False
@@ -163,7 +167,12 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
 
 
-_WEAK_SECRET_KEYS = {"your-secret-key-here", "your-jwt-secret-here", ""}
+_WEAK_SECRET_KEYS = {
+    "your-secret-key-here",
+    "your-secret-key-here-change-in-production",
+    "your-jwt-secret-here",
+    "",
+}
 
 _KEY_GEN_HINT = (
     "生成安全密钥命令：python -c \"import secrets; print(secrets.token_hex(32))\""

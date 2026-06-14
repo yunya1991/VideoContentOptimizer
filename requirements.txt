@@ -1,24 +1,27 @@
+# FastAPI 核心（版本严格对齐，避免 starlette 1.x 不兼容）
 fastapi==0.104.1
+starlette==0.27.0
 uvicorn[standard]==0.24.0
 pydantic==2.5.0
+pydantic_core==2.14.6
 pydantic-settings==2.1.0
 
-# 视频处理
+# 视频处理（opencv-python-headless 4.8 需 numpy<2）
 opencv-python-headless==4.8.1.78
+numpy==1.26.2
 ffmpeg-python==0.2.0
 moviepy==1.0.3
 Pillow==10.1.0
 
-# 音频转录
+# 音频转录（numpy 对齐；torch 2.2+ 支持 Python 3.12）
 faster-whisper==0.10.0
-torch==2.1.1
-torchaudio==2.1.1
+torch==2.2.0
+torchaudio==2.2.0
 
 # LLM 客户端
 openai==1.6.1
 
 # 数据处理
-numpy==1.26.2
 pandas==2.1.4
 
 # 数据库

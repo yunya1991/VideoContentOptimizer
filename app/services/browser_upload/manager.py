@@ -1,9 +1,16 @@
 """
 浏览器上传管理器
-根据平台名分发到对应上传器，统一调用
+根据平台名分发到对应上传器，统一调用。
+
+新增能力:
+- 从 app.config 读取 CDP 配置（单一真相源）
+- 每平台自动重试，默认 3 次
+- 输出结构化 upload_id 和 attempts 数组，方便排障
 """
 
 import os
+import time
+import uuid
 from typing import Dict, List, Optional, Any
 
 from app.utils.logger import logger
@@ -30,28 +37,47 @@ PLATFORM_UPLOADERS: Dict[str, type] = {
 }
 
 
+def _read_cdp_config():
+    """从 app.config 读取 CDP 默认配置（单一真相源）"""
+    try:
+        from app.config import get_settings
+        s = get_settings()
+        return {
+            "cdp_url": getattr(s, "CDP_URL", "http://127.0.0.1:9223"),
+            "max_retry": getattr(s, "CDP_MAX_RETRY", 3),
+            "retry_delay": getattr(s, "CDP_RETRY_DELAY", 2.0),
+            "upload_timeout": getattr(s, "CDP_UPLOAD_TIMEOUT", 300),
+        }
+    except Exception:
+        return {
+            "cdp_url": "http://127.0.0.1:9223",
+            "max_retry": 3,
+            "retry_delay": 2.0,
+            "upload_timeout": 300,
+        }
+
+
 class BrowserUploadManager:
     """
     浏览器上传管理器
 
     主要能力:
-    - 多平台视频自动上传
+    - 多平台视频自动上传（CDP 控制远程 Chromium）
     - CDP 浏览器连接健康检查
-    - 统一结果汇总
-
-    用法::
-
-        mgr = BrowserUploadManager(cdp_url="http://127.0.0.1:9223")
-        result = mgr.upload_to_platforms(
-            video_path="/tmp/my.mp4",
-            title="我的视频",
-            description="简介",
-            platforms=["douyin", "bilibili"],
-        )
+    - 统一结果汇总（含重试次数 / 截图路径）
     """
 
-    def __init__(self, cdp_url: str = "http://127.0.0.1:9223"):
-        self.cdp_url = cdp_url
+    def __init__(
+        self,
+        cdp_url: Optional[str] = None,
+        max_retry: Optional[int] = None,
+        retry_delay: Optional[float] = None,
+    ):
+        cfg = _read_cdp_config()
+        self.cdp_url = cdp_url or cfg["cdp_url"]
+        self.max_retry = max_retry if max_retry is not None else cfg["max_retry"]
+        self.retry_delay = retry_delay if retry_delay is not None else cfg["retry_delay"]
+        self.upload_timeout = cfg["upload_timeout"]
 
     # ─── 公共 API ─────────────────────────────────────────────
 
@@ -61,6 +87,8 @@ class BrowserUploadManager:
         return {
             "cdp_available": available,
             "cdp_url": self.cdp_url,
+            "max_retry": self.max_retry,
+            "retry_delay": self.retry_delay,
             "supported_platforms": list(PLATFORM_UPLOADERS.keys()),
         }
 
@@ -86,7 +114,7 @@ class BrowserUploadManager:
         tags: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
-        上传视频到多个平台。
+        上传视频到多个平台，每平台独立重试。
 
         Args:
             video_path: 本地视频文件绝对路径
@@ -96,19 +124,48 @@ class BrowserUploadManager:
             tags: 标签列表
 
         Returns:
-            dict - 每个平台的上传结果 + 汇总统计
+            dict - 结构:
+              {
+                "upload_id": "uuid",
+                "total": 3,
+                "success": 2,
+                "failed": 1,
+                "cdp_url": "http://127.0.0.1:9223",
+                "results": [
+                  {
+                    "platform": "douyin",
+                    "success": True,
+                    "attempts": 2,
+                    "message": "...",
+                    "screenshot": "/tmp/cdp_xxx.png",
+                    "video_path": "/tmp/xxx.mp4",
+                    "upload_url": "https://creator.douyin.com/..."
+                  },
+                  ...
+                ]
+              }
         """
+        upload_id = uuid.uuid4().hex[:12]
+        start_time = time.time()
+
         # 校验文件
         if not os.path.isfile(video_path):
             return {
+                "upload_id": upload_id,
+                "cdp_url": self.cdp_url,
                 "total": len(platforms),
                 "success": 0,
                 "failed": len(platforms),
+                "duration_sec": 0.0,
                 "results": [
                     {
                         "platform": p,
                         "success": False,
+                        "attempts": 0,
                         "message": f"视频文件不存在: {video_path}",
+                        "screenshot": None,
+                        "video_path": video_path,
+                        "upload_url": "",
                     }
                     for p in platforms
                 ],
@@ -130,23 +187,68 @@ class BrowserUploadManager:
         for p in valid_platforms:
             uploader_cls = PLATFORM_UPLOADERS[p]
             uploader: BaseBrowserUploader = uploader_cls(cdp_url=self.cdp_url)
-            try:
-                result: UploadResult = uploader.upload(
-                    video_path=video_path,
-                    title=title,
-                    description=description,
-                    tags=tags or [],
+
+            attempt_list = []
+            last_error = None
+            last_result_dict: Optional[Dict[str, Any]] = None
+
+            for attempt in range(1, self.max_retry + 1):
+                try:
+                    logger.info(
+                        f"[{upload_id}][{p}] 上传尝试 {attempt}/{self.max_retry}"
+                    )
+                    result: UploadResult = uploader.upload(
+                        video_path=video_path,
+                        title=title,
+                        description=description,
+                        tags=tags or [],
+                    )
+                    res_dict = result.to_dict()
+                    attempt_list.append(
+                        {
+                            "attempt": attempt,
+                            "success": res_dict.get("success", False),
+                            "message": res_dict.get("message", ""),
+                        }
+                    )
+
+                    if res_dict.get("success"):
+                        last_result_dict = res_dict
+                        logger.info(f"[{upload_id}][{p}] 上传成功（尝试 {attempt} 次）")
+                        break
+                    else:
+                        last_error = res_dict.get("message", "uploader 判定失败")
+                        logger.warning(
+                            f"[{upload_id}][{p}] 上传未成功（尝试 {attempt} 次）: {last_error}"
+                        )
+
+                except Exception as e:
+                    last_error = str(e)
+                    attempt_list.append(
+                        {"attempt": attempt, "success": False, "message": last_error}
+                    )
+                    logger.exception(f"[{upload_id}][{p}] 上传异常（尝试 {attempt} 次）")
+
+                # 下一次重试前等待
+                if attempt < self.max_retry:
+                    time.sleep(self.retry_delay)
+            else:
+                logger.warning(
+                    f"[{upload_id}][{p}] 已用尽 {self.max_retry} 次上传，放弃"
                 )
-                results.append(result.to_dict())
-            except Exception as e:
-                logger.exception(f"[{p}] 浏览器上传异常")
-                results.append(
-                    {
-                        "platform": p,
-                        "success": False,
-                        "message": f"上传异常: {e}",
-                    }
-                )
+
+            # 汇总该平台结果
+            success = last_result_dict is not None and last_result_dict.get("success", False)
+            base = {
+                "platform": p,
+                "success": success,
+                "attempts": len(attempt_list),
+                "message": (last_result_dict.get("message") if success else last_error) or "",
+                "screenshot": last_result_dict.get("screenshot") if last_result_dict else None,
+                "video_path": video_path,
+                "upload_url": last_result_dict.get("upload_url", "") if last_result_dict else "",
+            }
+            results.append(base)
 
         # 对无效平台返回错误信息
         for p in invalid:
@@ -154,15 +256,22 @@ class BrowserUploadManager:
                 {
                     "platform": p,
                     "success": False,
+                    "attempts": 0,
                     "message": f"不支持的平台，可选: {list(PLATFORM_UPLOADERS.keys())}",
+                    "screenshot": None,
+                    "video_path": video_path,
+                    "upload_url": "",
                 }
             )
 
         success_count = sum(1 for r in results if r["success"])
         return {
+            "upload_id": upload_id,
+            "cdp_url": self.cdp_url,
             "total": len(results),
             "success": success_count,
             "failed": len(results) - success_count,
+            "duration_sec": round(time.time() - start_time, 2),
             "results": results,
         }
 
@@ -188,7 +297,10 @@ class BrowserUploadManager:
                 "screenshot": screenshot,
             }
         except Exception as e:
-            client.disconnect()
+            try:
+                client.disconnect()
+            except Exception:
+                pass
             return {"ok": False, "message": str(e)}
 
     def get_uploader(self, platform: str) -> Optional[BaseBrowserUploader]:
