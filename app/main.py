@@ -80,12 +80,13 @@ app.add_middleware(
 )
 
 # --- 注册 v2 路由 ---
-from app.controllers.v2 import analyzer, optimizer, regenerator, feedback
+from app.controllers.v2 import analyzer, optimizer, regenerator, feedback, browser_upload
 
 app.include_router(analyzer.router, prefix="/api/v2", tags=["分析"])
 app.include_router(optimizer.router, prefix="/api/v2", tags=["优化"])
 app.include_router(regenerator.router, prefix="/api/v2", tags=["重生成"])
 app.include_router(feedback.router, prefix="/api/v2", tags=["反馈"])
+app.include_router(browser_upload.router, prefix="/api/v2", tags=["浏览器上传"])
 
 
 # --- 进化引擎状态端点 ---
@@ -134,6 +135,7 @@ async def root():
             "optimizer": "/api/v2/optimizer",
             "regenerator": "/api/v2/regenerator",
             "feedback": "/api/v2/feedback",
+            "browser_upload": "/api/v2/browser-upload",
             "docs": "/docs",
             "redoc": "/redoc",
         },
