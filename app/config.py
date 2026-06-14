@@ -72,6 +72,17 @@ class Settings(BaseSettings):
             return [p.strip().lower() for p in v.split(",") if p.strip()]
         return v
 
+    # CDP 浏览器自动化上传（tencent-novnc-chromium-cdp Skill）
+    # 用于无 API 的平台：抖音/小红书/B站/微信视频号/YouTube/TikTok
+    # 需要先部署并启动远程浏览器（noVNC + Chromium + CDP）
+    CDP_URL: str = "http://127.0.0.1:9223"
+    CDP_ENABLED: bool = False
+    # CDP 浏览器的页面宽度（用于渲染）
+    CDP_VIEWPORT_WIDTH: int = 1920
+    CDP_VIEWPORT_HEIGHT: int = 1080
+    # 单个视频上传等待转码的最大秒数
+    CDP_UPLOAD_TIMEOUT: int = 300
+
     # 字幕烧录（FFmpeg subtitles 滤镜）
     SUBTITLE_ENABLED: bool = False
     SUBTITLE_FONT_SIZE: int = 36

@@ -31,6 +31,7 @@ python-dotenv==1.0.0
 pyyaml==6.0.1
 toml==0.10.2
 requests==2.31.0
+websocket-client==1.6.4
 
 # Streamlit (Web UI)
 streamlit==1.29.0

@@ -1,0 +1,46 @@
+{
+  "name": "video-upload-browser",
+  "version": "1.0.0",
+  "display_name": "视频上传远程浏览器",
+  "description": "VideoContentOptimizer 专用远程浏览器环境 - 通过 CDP 协议自动化抖音/小红书/B站/微信视频号/YouTube/TikTok 的视频上传",
+  "category": "automation",
+  "tags": ["browser", "video-upload", "cdp", "novnc", "chromium", "douyin", "xiaohongshu", "bilibili", "tiktok", "youtube"],
+  "languages": ["zh-CN", "en"],
+  "platforms": ["linux"],
+  "author": "VideoContentOptimizer Team",
+  "license": "MIT",
+  "repository": "https://github.com/yunya1991/VideoContentOptimizer",
+  "homepage": "https://github.com/yunya1991/VideoContentOptimizer",
+  "published_at": "2026-06-14",
+  "requirements": {
+    "system": [
+      "Linux (Ubuntu 20.04+ / Debian 11+ / CentOS 8+ 推荐)",
+      "至少 2GB 内存",
+      "至少 2GB 可用磁盘空间",
+      "root 或 sudo 权限（用于安装依赖）"
+    ],
+    "python": [
+      "websocket-client>=1.6.0"
+    ]
+  },
+  "ports": {
+    "cdp": 9222,
+    "novnc": 6080,
+    "vnc": 5900,
+    "xvfb_display": ":99"
+  },
+  "integration": {
+    "project": "VideoContentOptimizer",
+    "api_prefix": "/api/v2/browser-upload",
+    "service_path": "app/services/browser_upload",
+    "config_prefix": "CDP_"
+  },
+  "scripts": {
+    "setup": "scripts/setup.sh",
+    "start": "scripts/start.sh",
+    "stop": "scripts/stop.sh",
+    "restart": "scripts/restart.sh",
+    "health_check": "scripts/health-check.sh",
+    "uninstall": "scripts/uninstall.sh"
+  }
+}
