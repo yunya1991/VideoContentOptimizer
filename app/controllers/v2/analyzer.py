@@ -5,7 +5,8 @@ API v2 - 分析控制器
 import os
 import uuid
 import tempfile
-import shutil
+import asyncio
+import concurrent.futures
 from typing import List, Optional
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
@@ -107,6 +108,37 @@ def _cleanup(path: str):
         logger.warning(f"清理临时文件失败 {path}: {e}")
 
 
+def _process_single_video(video: UploadFile) -> dict:
+    """处理单个视频文件，返回分析结果字典（在线程池中执行）"""
+    temp_path = None
+    try:
+        temp_path = _save_upload(video)
+        parser = VideoParser()
+        metadata = parser.parse_video(temp_path)
+        return {
+            "filename": video.filename,
+            "status": "success",
+            "duration": metadata.duration,
+            "resolution": metadata.resolution,
+            "file_size": metadata.file_size,
+        }
+    except HTTPException as e:
+        return {
+            "filename": video.filename,
+            "status": "error",
+            "error": e.detail,
+        }
+    except Exception as e:
+        logger.error(f"批量分析单个文件失败 {video.filename}: {e}")
+        return {
+            "filename": video.filename,
+            "status": "error",
+            "error": str(e),
+        }
+    finally:
+        _cleanup(temp_path)
+
+
 # --- 接口 ---
 
 @router.post("/analyze", response_model=AnalysisResponse, summary="分析单个视频")
@@ -165,14 +197,23 @@ async def analyze_video(
         quality = None
         try:
             scorer = QualityScorer()
-            prod_score = scorer.score_production_quality(metadata)
-            quality = QualityScore(
-                content_quality=prod_score,
-                production_quality=prod_score,
-                engagement_potential=prod_score,
-                originality=prod_score,
-                overall_score=prod_score,
-            )
+            if transcript and intent:
+                # 有完整信息时使用完整评分
+                quality = scorer.generate_quality_score(
+                    transcript=transcript,
+                    intent=intent,
+                    metadata=metadata
+                )
+            else:
+                # 仅元数据时只评估制作质量，其他维度设为默认值
+                prod_score = scorer.score_production_quality(metadata)
+                quality = QualityScore(
+                    content_quality=5.0,
+                    production_quality=prod_score,
+                    engagement_potential=5.0,
+                    originality=5.0,
+                    overall_score=prod_score,
+                )
             logger.info(f"质量评分: 制作 {quality.production_quality:.1f}")
         except Exception as e:
             logger.warning(f"质量评分失败 (非致命): {e}")
@@ -246,43 +287,21 @@ async def analyze_video(
 async def batch_analyze(
     videos: List[UploadFile] = File(..., description="视频文件列表"),
 ):
-    """批量分析视频"""
+    """批量分析视频（并发执行）"""
     if len(videos) > settings.MAX_BATCH_VIDEOS:
         raise HTTPException(
             status_code=400,
             detail=f"批量上传数量超限，最多 {settings.MAX_BATCH_VIDEOS} 个",
         )
 
-    results = []
-    for video in videos:
-        temp_path = None
-        try:
-            temp_path = _save_upload(video)
-            parser = VideoParser()
-            metadata = parser.parse_video(temp_path)
-
-            results.append({
-                "filename": video.filename,
-                "status": "success",
-                "duration": metadata.duration,
-                "resolution": metadata.resolution,
-                "file_size": metadata.file_size,
-            })
-        except HTTPException as e:
-            results.append({
-                "filename": video.filename,
-                "status": "error",
-                "error": e.detail,
-            })
-        except Exception as e:
-            logger.error(f"批量分析单个文件失败 {video.filename}: {e}")
-            results.append({
-                "filename": video.filename,
-                "status": "error",
-                "error": str(e),
-            })
-        finally:
-            _cleanup(temp_path)
+    # 使用线程池并发处理视频
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=settings.PARALLEL_WORKERS) as executor:
+        tasks = [
+            loop.run_in_executor(executor, _process_single_video, video)
+            for video in videos
+        ]
+        results = await asyncio.gather(*tasks)
 
     batch_id = f"batch_{uuid.uuid4().hex[:12]}"
     logger.info(f"批量分析完成: {batch_id}, 成功 {sum(1 for r in results if r['status'] == 'success')}/{len(videos)}")
@@ -291,7 +310,7 @@ async def batch_analyze(
         "batch_id": batch_id,
         "total": len(videos),
         "processed": len([r for r in results if r["status"] == "success"]),
-        "results": results,
+        "results": list(results),
     }
 
 

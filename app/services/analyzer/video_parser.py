@@ -21,30 +21,33 @@ class VideoParser:
     def parse_video(video_path: str) -> VideoMetadata:
         """
         提取视频元数据
-        
+
         Args:
             video_path: 视频文件路径
-            
+
         Returns:
             VideoMetadata: 视频元数据对象
         """
-        # 使用 OpenCV 获取基本信息
-        cap = cv2.VideoCapture(video_path)
-        
-        if not cap.isOpened():
-            raise ValueError(f"无法打开视频文件: {video_path}")
-        
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration = frame_count / fps if fps > 0 else 0
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        
-        cap.release()
-        
+        cap = None
+        try:
+            cap = cv2.VideoCapture(video_path)
+
+            if not cap.isOpened():
+                raise ValueError(f"无法打开视频文件: {video_path}")
+
+            fps = int(cap.get(cv2.CAP_PROP_FPS))
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            duration = frame_count / fps if fps > 0 else 0
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        finally:
+            if cap is not None:
+                cap.release()
+
         # 使用 ffprobe 获取详细元数据
-        bitrate, format_name = VideoParser._get_ffprobe_info(video_path)
-        
+        ffprobe_path = VideoParser._get_ffprobe_path()
+        bitrate, format_name = VideoParser._get_ffprobe_info(video_path, ffprobe_path)
+
         return VideoMetadata(
             duration=duration,
             fps=fps,
@@ -55,11 +58,24 @@ class VideoParser:
         )
     
     @staticmethod
-    def _get_ffprobe_info(video_path: str) -> tuple:
+    def _get_ffprobe_path() -> str:
+        """获取 ffprobe 路径，基于 ffmpeg 路径"""
+        ffmpeg_path = settings.FFMPEG_PATH
+        base_dir = os.path.dirname(ffmpeg_path)
+        # 假设 ffprobe 与 ffmpeg 在同一目录，且名称为 ffprobe
+        return os.path.join(base_dir, "ffprobe")
+
+    @staticmethod
+    def _get_ffprobe_info(video_path: str, ffprobe_path: str = None) -> tuple:
         """使用 ffprobe 获取比特率和格式"""
+        if ffprobe_path is None:
+            ffmpeg_path = settings.FFMPEG_PATH
+            base_dir = os.path.dirname(ffmpeg_path)
+            ffprobe_path = os.path.join(base_dir, "ffprobe")
+
         try:
             cmd = [
-                settings.FFMPEG_PATH.replace('ffmpeg', 'ffprobe'),
+                ffprobe_path,
                 '-v', 'quiet',
                 '-print_format', 'json',
                 '-show_format',
